@@ -203,8 +203,8 @@
         "\n=== 复盘结束 ==="
       : "";
 
-    // 个人 memory（你视角下的最近 3 天）
-    const memoryBlock = buildMemoryBlock(context.me.recentMemory);
+    // 个人记忆摘要（你视角下的最近 3 天，每天 ≤80 字压缩摘要）
+    const memoryBlock = buildMemoryBlock(context.me.recentMemoryDigests);
 
     return [
       `当前阶段：${phase}`,
@@ -229,25 +229,17 @@
     ].filter(Boolean).join("\n");
   }
 
-  // ===== 你视角下的最近 3 天个人 memory =====
-  function buildMemoryBlock(recentMemory) {
-    if (!recentMemory || recentMemory.length === 0) return "";
-    const lines = ["=== 你的个人备忘（最近 3 天，你视角）==="];
-    recentMemory.forEach(entry => {
-      lines.push(`【第${entry.day}天】`);
-      if (entry.otherSpeeches?.length) {
-        lines.push("  他人发言：");
-        entry.otherSpeeches.forEach(s => {
-          const tag = s.publicRole ? `[已跳${ROLE_CN[s.publicRole] || s.publicRole}]` : "[未跳]";
-          lines.push(`    · ${s.no}号${tag}："${s.text}"`);
-        });
-      }
-      if (entry.myActions?.length) {
-        lines.push("  我的行动：");
-        entry.myActions.forEach(a => lines.push(`    · ${a.kind}：「${a.thinking}」`));
-      }
+  // ===== 你视角下的最近 3 天个人记忆（摘要式，每天 ≤80 字） =====
+  // 设计意图：避免把当天的原始发言+思考全塞 prompt 导致上下文爆掉。
+  // 摘要由 _flushAgentMemories 调 summarize hook 生成（fallback 用规则）；
+  // 原始数据仍写盘到 memory/agent-N.md，供人工 review 或外部工具按需读取。
+  function buildMemoryBlock(recentMemoryDigests) {
+    if (!recentMemoryDigests || recentMemoryDigests.length === 0) return "";
+    const lines = ["=== 你的个人记忆（最近 3 天压缩摘要，你视角）==="];
+    recentMemoryDigests.forEach(entry => {
+      if (entry.digest) lines.push(`【第${entry.day}天】${entry.digest}`);
     });
-    lines.push("=== 备忘结束 ===");
+    lines.push("=== 记忆结束（如需查阅当天原始发言全文，本局 memory/agent-N.md 已落盘）===");
     return lines.join("\n");
   }
 

@@ -177,32 +177,54 @@ python launcher/launcher.py
 
 ## Agent 本局记忆 (memory/agent-N.md)
 
-每天的发言+投票阶段结束后，**每个存活 Agent 自动落一段 markdown** 到 `memory/agent-<座位号>.md`，结构：
+**memory tool 风格的分层设计**：避免把原始流水账全塞 prompt，每天用 LLM 生成 ≤80 字摘要喂给后续决策，原始数据写盘供人工 review。
+
+### 双层结构
+
+| 层 | 内容 | 进 prompt？ | 写盘？ |
+|---|---|---|---|
+| **压缩摘要** `agent.memoryDigestByDay[day]` | LLM 生成的 ≤80 字本日个人记忆 | ✅ 最近 3 天 | ✅ markdown 顶部 |
+| **原始数据** `agent.memoryByDay[day]` | 当天他人发言 + 自己思考动作全文 | ❌ 不进 prompt | ✅ `<details>` 折叠区 |
+
+每天投票结束后，`game._flushAgentMemories()` 会给每个存活 Agent 调一次 LLM：
+
+```
+你正在扮演 N 号 ...（角色 · 性格）。请用第一人称写一段 ≤80 字的【本日个人记忆摘要】
+作为你明天打牌的依据。要点：今日最关键判断、谁可信、谁可疑、明天计划。
+```
+
+LLM 失败时走规则 fallback（基于 suspicion 排出"信任/怀疑"名单）。
+
+### markdown 结构
 
 ```markdown
 # Agent 3 · 阿狸 · 预言家 · 稳健
 
 ## 第 1 天
 
+**摘要**：今日 5 号悍跳，我对位真预报查 6 号查杀；信任 7/9 号金水，怀疑 5/11 号节奏可疑；明日投 5 号。
+
+<details><summary>原始材料</summary>
+
 **他人发言**：
 - 1号[未跳]（白天发言）："..."
-- 2号[已跳预言家]（白天发言）："..."
+- 5号[已跳预言家]（白天发言）："..."
 
 **我的行动**：
 - speak: 「今天必须报查验，对位 5 号悍跳」
 - vote: 「7 号查杀稳投」
 
-## 第 2 天
-...
+</details>
 ```
 
-**用途**：
+### 用途
 
-- **决策回灌**：next day 的 prompt 自动附带该 Agent 最近 3 天的 memory（你视角下的他人发言 + 自己思考），让 LLM 跨天保持人设和策略
-- **人工复盘**：游戏结束后直接看每个 Agent 的 md 文件，能还原他们各自的视角和决策链
+- **决策回灌（压缩摘要）**：next day 的 prompt 自动附带最近 3 天的 ≤80 字摘要（共 ≤240 字），远小于原始流水账（每天几百到上千字）
+- **避免上下文爆掉**：实测压缩到 ~50%；真实长发言场景下能压缩到 ~20%
+- **人工复盘（原始数据）**：游戏结束后直接看 `memory/agent-N.md`，能完整还原每个 Agent 的视角和决策链
 - **仅本局**：每次「开始游戏」会先 `POST /memory/reset` 清掉上局所有 `agent-*.md`
 
-**端点**（已加入到 `server/llm-proxy.js`）：
+### 端点
 
 ```
 POST /memory        body: { agentNo, header?, content }   # 追加（首次写带 header）
@@ -210,6 +232,14 @@ POST /memory/reset                                          # 删除 memory/agen
 ```
 
 `agentNo` 必须是 1-99 的整数，路径穿越会被拒（`{"error":"bad agentNo: ..."}`）。
+
+### 验证
+
+```bash
+npm run verify-memory
+```
+
+会起一个本地 llm-proxy + 用 mock 数据跑 4 组测试：(1) LLM 路径生效 (2) LLM 失败时 fallback (3) prompt 段压缩率 (4) 12 agent 并发摘要。
 
 ---
 
