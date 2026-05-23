@@ -34,7 +34,50 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Optional
 
-# ─── 日志 ────────────────────────────────────────────────────
+# ─── 终端彩色输出工具（VSCode Terminal 适用）────────────────────────
+class C:
+    RESET="[0m"; BOLD="[1m"; DIM="[2m"
+    RED="[31m"; GREEN="[32m"; YELLOW="[33m"
+    BLUE="[34m"; MAGENTA="[35m"; CYAN="[36m"
+    BRED="[91m"; BGREEN="[92m"; BYELLOW="[93m"
+    BBLUE="[94m"; BMAGENTA="[95m"; BCYAN="[96m"
+
+def banner(title: str, sub: str = "", width: int = 64) -> None:
+    line = "═" * width
+    print(f"\n{C.BCYAN}{C.BOLD}{line}")
+    print(f"  {title}")
+    if sub:
+        print(f"  {C.DIM}{sub}{C.BCYAN}{C.BOLD}")
+    print(f"{line}{C.RESET}")
+
+def section(title: str) -> None:
+    line = "─" * 60
+    print(f"\n{C.CYAN}{C.BOLD}{line}\n  {title}\n{line}{C.RESET}")
+
+def info(label: str, value: str = "") -> None:
+    if value:
+        print(f"  {C.BBLUE}▸{C.RESET} {C.BOLD}{label}:{C.RESET} {value}")
+    else:
+        print(f"  {C.BBLUE}▸{C.RESET} {label}")
+
+def ok(msg: str) -> None:
+    print(f"  {C.BGREEN}✓{C.RESET} {msg}")
+
+def warn(msg: str) -> None:
+    print(f"  {C.BYELLOW}⚠{C.RESET} {msg}")
+
+def err(msg: str) -> None:
+    print(f"  {C.BRED}✗{C.RESET} {msg}")
+
+def show(label: str, text: str, color: str = "") -> None:
+    color = color or C.YELLOW
+    print(f"\n  {color}{C.BOLD}▣ {label}{C.RESET}")
+    for ln in str(text).split("\n"):
+        print(f"    {ln}")
+# ─────────────────────────────────────────────────────────────
+
+
+# ─── 日志 ────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
@@ -68,18 +111,16 @@ STATUS_ICON = {
 
 @dataclass
 class StageResult:
-    """每个 Stage 执行完毕后追加到 state.stage_results"""
     stage:    str
     status:   StageStatus     = StageStatus.PASSED
     summary:  str             = ""
     findings: list[str]       = field(default_factory=list)
-    score:    Optional[float] = None    # 0-10，无评分时为 None
-    duration: float           = 0.0    # 秒，由 Pipeline 引擎注入
+    score:    Optional[float] = None
+    duration: float           = 0.0
 
 
 @dataclass
 class PRContext:
-    """PR 元信息（流水线的外部输入，对应真实 CI 触发事件）"""
     repo:        str
     pr_number:   int
     author:      str
@@ -91,15 +132,11 @@ class PRContext:
 
 @dataclass
 class PipelineState:
-    """
-    贯穿所有 Stage 的唯一可变数据载体。
-    Stage 只读取 / 写入这个对象，不使用全局变量。
-    """
     pr:             PRContext
     stage_results:  list[StageResult] = field(default_factory=list)
     parsed_summary: str               = ""
-    security_risk:  str               = "none"   # none/low/medium/high/critical
-    critical_abort: bool              = False    # True 时质量 / 测试 Stage 自动跳过
+    security_risk:  str               = "none"
+    critical_abort: bool              = False
     quality_score:  float             = 0.0
     test_score:     float             = 0.0
     report_path:    str               = ""
@@ -107,21 +144,17 @@ class PipelineState:
 
 @dataclass
 class PipelineConfig:
-    """
-    可外化为 YAML / 环境变量的全局配置。
-    生产中通过 pydantic-settings 或 dynaconf 加载。
-    """
     model:             str   = "claude-sonnet-4-20250514"
     max_tokens:        int   = 1500
     retry_attempts:    int   = 3
-    retry_base_delay:  float = 1.0      # 秒，指数退避基数
+    retry_base_delay:  float = 1.0
     output_dir:        str   = "./pr_reports"
-    quality_threshold: float = 6.0     # 低于此分 → WARNING
+    quality_threshold: float = 6.0
     test_threshold:    float = 6.0
 
 
 # ============================================================
-# Pipeline 引擎（纯调度逻辑，不含任何业务代码）
+# Pipeline 引擎
 # ============================================================
 
 @dataclass
@@ -130,14 +163,10 @@ class PipelineStep:
     description: str
     handler:     Callable[[PipelineState, PipelineConfig], PipelineState]
     skip_if:     Callable[[PipelineState], bool] = field(default=lambda _: False)
-    on_error:    str = "warn"     # "warn" | "abort"
+    on_error:    str = "warn"
 
 
 def with_retry(fn: Callable, attempts: int, base_delay: float):
-    """
-    指数退避重试装饰器。
-    保护 LLM 调用免受网络抖动影响，生产中可换成 tenacity 库。
-    """
     for i in range(attempts):
         try:
             return fn()
@@ -154,16 +183,6 @@ def run_pipeline(
     steps: list[PipelineStep],
     cfg: PipelineConfig,
 ) -> PipelineState:
-    """
-    Pipeline 执行引擎。
-    ─────────────────────────────────────────────────────────
-    职责：遍历 steps，统一处理 skip_if / on_error / 计时 / 异常捕获。
-    不包含任何业务逻辑，业务逻辑全在各 Stage handler 里。
-
-    数据流：
-      PipelineState  ──(handler)──►  PipelineState（追加 StageResult）
-                     ◄─(engine)───   duration 注入
-    """
     state = PipelineState(pr=pr)
     pipeline_start = time.perf_counter()
 
@@ -174,7 +193,6 @@ def run_pipeline(
     log.info("=" * 65)
 
     for step in steps:
-        # ── 条件跳过（skip_if 由 Pipeline 评估，Stage 本身无感知）──
         if step.skip_if(state):
             state.stage_results.append(StageResult(
                 stage=step.description,
@@ -190,7 +208,6 @@ def run_pipeline(
         try:
             state = step.handler(state, cfg)
             duration = time.perf_counter() - stage_start
-            # Pipeline 引擎注入耗时（Stage 内部不需要关心）
             if state.stage_results:
                 state.stage_results[-1].duration = duration
             log.info(f"    ✓ 完成  [{duration:.1f}s]")
@@ -217,7 +234,7 @@ def run_pipeline(
 
 
 # ============================================================
-# LLM 调用封装（所有 Stage 共用，便于集中替换模型或加缓存）
+# LLM 调用封装
 # ============================================================
 
 def llm_call(system: str, user: str, cfg: PipelineConfig) -> str:
@@ -231,17 +248,25 @@ def llm_call(system: str, user: str, cfg: PipelineConfig) -> str:
 
 
 def safe_json(text: str) -> dict:
-    """容错 JSON 解析，移除 LLM 可能输出的 markdown 代码块包裹"""
-    cleaned = text.strip().removeprefix("```json").removeprefix("```")
-    cleaned = cleaned.removesuffix("```").strip()
+    import re as _re
+    cleaned = text.strip()
+    cleaned = _re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+    cleaned = _re.sub(r"\n?```\s*$", "", cleaned).strip()
     try:
         return json.loads(cleaned)
-    except Exception:
+    except json.JSONDecodeError:
+        m = _re.search(r"(\{[\s\S]*?\}|\[[\s\S]*?\])", cleaned)
+        if m:
+            try:
+                return json.loads(m.group(1))
+            except json.JSONDecodeError:
+                pass
+        log.warning(f"safe_json 解析失败 (前80字): {cleaned[:80]}")
         return {}
 
 
 # ============================================================
-# Prompts（集中管理，便于版本控制和 A/B 测试）
+# Prompts
 # ============================================================
 
 PARSE_PROMPT = """你是一个代码变更分析专家。
@@ -272,7 +297,7 @@ SECURITY_PROMPT = """你是一个应用安全专家（SAST 代码审查）。
   "risk_level": "none/low/medium/high/critical",
   "vulnerabilities": [
     {
-      "type":        "漏洞类型（如 Hardcoded Secret）",
+      "type":        "漏洞类型",
       "location":    "文件名或函数名",
       "severity":    "high/medium/low",
       "description": "问题描述（一句话）",
@@ -285,11 +310,11 @@ QUALITY_PROMPT = """你是一个代码质量专家。
 
 评估代码可维护性，检查以下维度：
 - 函数职责单一性（SRP）
-- 命名清晰度（函数 / 变量 / 常量）
-- 错误处理完整性（异常捕获、返回值校验）
+- 命名清晰度
+- 错误处理完整性
 - 代码重复（DRY 原则）
 - 圈复杂度（嵌套层级过深）
-- 可测试性（是否便于 Mock / 注入依赖）
+- 可测试性
 
 输出 JSON（只输出 JSON）：
 {
@@ -311,25 +336,25 @@ TEST_PROMPT = """你是一个测试工程师。
 - 核心业务逻辑是否覆盖
 - 边界条件 / 异常路径是否有测试
 - 测试命名是否清晰表达意图
-- 是否过度 Mock 导致测试意义下降
-- 断言是否足够严格（不只是 assert result is not None）
+- 是否过度 Mock
+- 断言是否足够严格
 
 输出 JSON（只输出 JSON）：
 {
   "score":               1-10,
   "has_tests":           true/false,
-  "coverage_assessment": "覆盖情况描述（一句话）",
+  "coverage_assessment": "覆盖情况描述",
   "missing_scenarios":   ["缺失的关键测试场景"],
   "issues":              ["其他质量问题"]
 }"""
 
 DEP_PROMPT = """你是一个开源依赖安全专家。
 
-评估新增依赖的风险（基于你知识截止日期内的信息）：
-- 是否知名、活跃维护（有无长期无更新迹象）
+评估新增依赖的风险：
+- 是否知名、活跃维护
 - 是否有已知 CVE 高危漏洞
 - 许可证兼容性（MIT / Apache-2.0 对商业友好；GPL / AGPL 需法务确认）
-- 包名是否有拼写劫持风险（typosquatting）
+- 包名是否有拼写劫持风险
 
 输出 JSON（只输出 JSON）：
 {
@@ -361,14 +386,12 @@ REPORT_PROMPT = """你是一个技术评审 Lead，正在撰写 PR 审查报告�
 ## 📝 变更摘要
 
 ## 🔒 安全审查
-（分漏洞类型列出，无则写"无安全风险"）
 
 ## 🧹 代码质量
 
 ## 🧪 测试审计
 
 ## 📦 依赖审计
-（若跳过则写"本次 PR 无新增依赖"）
 
 ## ✅ 合并建议与行动项
 ### 必须修复（Blocking）
@@ -377,7 +400,7 @@ REPORT_PROMPT = """你是一个技术评审 Lead，正在撰写 PR 审查报告�
 
 
 # ============================================================
-# Stage 实现（每个都是纯函数，(state, cfg) → state）
+# Stage 实现
 # ============================================================
 
 def stage_parse(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
@@ -392,10 +415,8 @@ def stage_parse(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
     data = safe_json(raw)
     state.parsed_summary = data.get("summary", "")
     risk_areas = data.get("risk_areas", [])
-
     log.info(f"    变更类型：{data.get('change_types', [])}")
     log.info(f"    复杂度：{data.get('complexity', '?')}  风险区：{risk_areas}")
-
     state.stage_results.append(StageResult(
         stage="变更解析",
         status=StageStatus.PASSED,
@@ -407,18 +428,13 @@ def stage_parse(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
 
 def stage_security(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
     raw = with_retry(
-        lambda: llm_call(
-            SECURITY_PROMPT,
-            f"PR：{state.pr.title}\n\nDiff：\n{state.pr.diff}",
-            cfg,
-        ),
+        lambda: llm_call(SECURITY_PROMPT, f"PR：{state.pr.title}\n\nDiff：\n{state.pr.diff}", cfg),
         cfg.retry_attempts, cfg.retry_base_delay,
     )
     data = safe_json(raw)
     vulns = data.get("vulnerabilities", [])
     risk  = data.get("risk_level", "none")
     state.security_risk = risk
-
     findings = [
         f"[{v.get('severity','?').upper()}][{v.get('type','')}] "
         f"{v.get('location','')} — {v.get('description','')} | Fix: {v.get('fix','')}"
@@ -426,7 +442,6 @@ def stage_security(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
     ]
     for f in findings:
         log.info(f"    {f}")
-
     if risk == "critical":
         state.critical_abort = True
         status = StageStatus.FAILED
@@ -434,7 +449,6 @@ def stage_security(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
         status = StageStatus.WARNING
     else:
         status = StageStatus.PASSED
-
     state.stage_results.append(StageResult(
         stage="安全扫描",
         status=status,
@@ -446,11 +460,7 @@ def stage_security(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
 
 def stage_quality(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
     raw = with_retry(
-        lambda: llm_call(
-            QUALITY_PROMPT,
-            f"PR：{state.pr.title}\n\nDiff：\n{state.pr.diff}",
-            cfg,
-        ),
+        lambda: llm_call(QUALITY_PROMPT, f"PR：{state.pr.title}\n\nDiff：\n{state.pr.diff}", cfg),
         cfg.retry_attempts, cfg.retry_base_delay,
     )
     data = safe_json(raw)
@@ -461,10 +471,8 @@ def stage_quality(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
         f"{i.get('description','')} → {i.get('suggestion','')}"
         for i in issues
     ]
-
     log.info(f"    质量评分：{state.quality_score:.1f}/10  问题数：{len(issues)}")
     status = StageStatus.PASSED if state.quality_score >= cfg.quality_threshold else StageStatus.WARNING
-
     state.stage_results.append(StageResult(
         stage="代码质量",
         status=status,
@@ -477,21 +485,15 @@ def stage_quality(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
 
 def stage_test(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
     raw = with_retry(
-        lambda: llm_call(
-            TEST_PROMPT,
-            f"PR：{state.pr.title}\n\nDiff：\n{state.pr.diff}",
-            cfg,
-        ),
+        lambda: llm_call(TEST_PROMPT, f"PR：{state.pr.title}\n\nDiff：\n{state.pr.diff}", cfg),
         cfg.retry_attempts, cfg.retry_base_delay,
     )
     data = safe_json(raw)
     state.test_score = float(data.get("score", 0))
     has_tests = data.get("has_tests", False)
     missing   = data.get("missing_scenarios", [])
-
     log.info(f"    测试评分：{state.test_score:.1f}/10  有测试：{has_tests}")
     status = StageStatus.PASSED if state.test_score >= cfg.test_threshold else StageStatus.WARNING
-
     state.stage_results.append(StageResult(
         stage="测试审计",
         status=status,
@@ -525,9 +527,7 @@ def stage_dep(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
     ]
     for f in findings:
         log.info(f"    {f}")
-
     status = StageStatus.WARNING if overall_risk in ("medium", "high") else StageStatus.PASSED
-
     state.stage_results.append(StageResult(
         stage="依赖审计",
         status=status,
@@ -538,7 +538,6 @@ def stage_dep(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
 
 
 def stage_report(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
-    # 把所有 StageResult 格式化成 Markdown 供 LLM 汇总
     stages_md = "\n\n".join([
         f"### {r.stage}\n"
         f"状态：{STATUS_ICON.get(r.status,'')} {r.status.value}"
@@ -565,7 +564,6 @@ def stage_report(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
         cfg.retry_attempts, cfg.retry_base_delay,
     )
 
-    # 写入文件（生产中可同时推送到 GitHub PR Review API）
     out_dir = pathlib.Path(cfg.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -579,7 +577,6 @@ def stage_report(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
         summary=f"已写入 {state.report_path}",
     ))
 
-    # 打印汇总表
     log.info("\n  " + "─" * 63)
     log.info(f"  汇总  |  PR #{state.pr.pr_number}  {state.pr.title}")
     log.info("  " + "─" * 63)
@@ -596,7 +593,6 @@ def stage_report(state: PipelineState, cfg: PipelineConfig) -> PipelineState:
 
 # ============================================================
 # Pipeline 定义
-# Stage 列表 = 产品需求的代码化表达，顺序调整 / 新增 Stage 只改这里
 # ============================================================
 
 PIPELINE_STEPS: list[PipelineStep] = [
@@ -610,40 +606,40 @@ PIPELINE_STEPS: list[PipelineStep] = [
         name="security",
         description="安全漏洞扫描（OWASP Top 10）",
         handler=stage_security,
-        on_error="warn",    # 扫描失败只记 WARNING，报告仍会生成
+        on_error="warn",
     ),
     PipelineStep(
         name="quality",
         description="代码质量检查",
         handler=stage_quality,
-        skip_if=lambda s: s.critical_abort,   # Critical 安全风险时自动跳过
+        skip_if=lambda s: s.critical_abort,
         on_error="warn",
     ),
     PipelineStep(
         name="test",
         description="测试覆盖审计",
         handler=stage_test,
-        skip_if=lambda s: s.critical_abort,   # 同上
+        skip_if=lambda s: s.critical_abort,
         on_error="warn",
     ),
     PipelineStep(
         name="dep",
         description="依赖风险评估",
         handler=stage_dep,
-        skip_if=lambda s: not s.pr.new_deps,  # 无新增依赖时跳过
+        skip_if=lambda s: not s.pr.new_deps,
         on_error="warn",
     ),
     PipelineStep(
         name="report",
         description="综合报告生成",
         handler=stage_report,
-        on_error="abort",   # 报告是最终交付物，失败则终止
+        on_error="abort",
     ),
 ]
 
 
 # ============================================================
-# 演示数据（含多类典型安全问题，便于验证各 Stage）
+# 演示数据
 # ============================================================
 
 DEMO_PR = PRContext(
@@ -664,7 +660,7 @@ new file mode 100644
 @@ -0,0 +1,72 @@
 +import requests, hashlib, json, pickle
 +
-+# !! 硬编码密钥（应从环境变量读取）
++# !! 硬编码密鑰（应从环境变量读取）
 +WECHAT_SECRET = "sk-live-abc123XYZ789secretKey"
 +MERCHANT_ID   = "1234567890"
 +
@@ -694,7 +690,7 @@ new file mode 100644
 +        return self.session.get(url).json()
 +
 +    def refund(self, order_id, amount, reason):
-+        # 未校验 amount 为正数，存在退款金额篡改风险
++        # 未校验 amount 为正数
 +        payload = {
 +            "transaction_id": order_id,
 +            "out_refund_no":  f"refund_{order_id}",
@@ -715,7 +711,7 @@ new file mode 100644
 +def test_create_order_happy_path():
 +    pay = WechatPay()
 +    result = pay.create_order({"amount": 100, "openid": "oXXX"})
-+    assert result is not None    # 断言太弱，仅覆盖 happy path
++    assert result is not None
 
 diff --git a/requirements.txt b/requirements.txt
 --- a/requirements.txt
