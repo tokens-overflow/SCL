@@ -98,12 +98,10 @@ class AnthropicClient(BaseLLMClient):
             kwargs["system"] = system
         if stop:
             kwargs["stop_sequences"] = stop
-        # Anthropic 扩展思考模式不支持 temperature，普通模式支持
-        # kwargs["temperature"] = temperature  # 按需启用
 
         resp = self.client.messages.create(**kwargs)
         text = resp.content[0].text
-        stop_reason = resp.stop_reason  # "end_turn" | "stop_sequence" | "max_tokens"
+        stop_reason = resp.stop_reason
         return LLMResponse(text, stop_reason)
 
 
@@ -118,14 +116,12 @@ class OpenAIClient(BaseLLMClient):
             api_key=api_key or os.environ.get("OPENAI_API_KEY", ""),
             base_url=base_url or None,
         )
-        # o1/o3 系列不支持 system message，需要特殊处理
         self._is_reasoning = model.startswith(("o1", "o3"))
 
     def chat(self, user, system="", max_tokens=1000, stop=None, temperature=0.7):
         messages = []
         if system:
             if self._is_reasoning:
-                # o1/o3：system 内容合并到第一条 user 消息
                 messages.append({"role": "user", "content": f"{system}\n\n{user}"})
             else:
                 messages.append({"role": "system", "content": system})
@@ -136,7 +132,6 @@ class OpenAIClient(BaseLLMClient):
         kwargs = dict(model=self.model, messages=messages)
 
         if self._is_reasoning:
-            # o1/o3：使用 max_completion_tokens，不支持 temperature/stop
             kwargs["max_completion_tokens"] = max_tokens
         else:
             kwargs["max_tokens"] = max_tokens
@@ -146,7 +141,7 @@ class OpenAIClient(BaseLLMClient):
 
         resp = self.client.chat.completions.create(**kwargs)
         text = resp.choices[0].message.content or ""
-        finish = resp.choices[0].finish_reason  # "stop" | "length" | "stop"
+        finish = resp.choices[0].finish_reason
         stop_reason = {
             "stop": "end_turn",
             "length": "max_tokens",
@@ -165,7 +160,6 @@ class DeepSeekClient(BaseLLMClient):
             api_key=api_key or os.environ.get("DEEPSEEK_API_KEY", ""),
             base_url="https://api.deepseek.com/v1",
         )
-        # deepseek-reasoner 是推理模型，有特殊 reasoning_content 字段
         self._is_reasoner = "reasoner" in model
 
     def chat(self, user, system="", max_tokens=1000, stop=None, temperature=0.7):
@@ -188,10 +182,8 @@ class DeepSeekClient(BaseLLMClient):
         choice = resp.choices[0]
         text = choice.message.content or ""
 
-        # deepseek-reasoner 可选：同时获取推理过程
         reasoning = getattr(choice.message, "reasoning_content", None)
         if reasoning:
-            # 把推理过程作为注释附加（按需保留）
             text = f"[思考过程]\n{reasoning}\n\n[最终答案]\n{text}"
 
         stop_reason = "end_turn" if choice.finish_reason == "stop" else "max_tokens"
@@ -324,7 +316,6 @@ def LLMClient(
                   base_url="https://api.siliconflow.cn/v1", api_key="sk-xxx")
         LLMClient("kimi", "moonshot-v1-8k")   # 使用预设 base_url
     """
-    # 检查是否是预设服务名
     if provider in PRESET_BASE_URLS and not base_url:
         base_url = PRESET_BASE_URLS[provider]
         provider = "openai_compat"
@@ -336,7 +327,6 @@ def LLMClient(
             f"支持: {list(PROVIDER_MAP.keys())} 或预设服务: {list(PRESET_BASE_URLS.keys())}"
         )
 
-    # 按构造函数需要的参数传递
     if provider in ("openai", "openai_compat", "claude", "gpt", "anthropic"):
         if base_url:
             return cls(model=model, api_key=api_key, base_url=base_url, **kwargs)
@@ -348,38 +338,3 @@ def LLMClient(
         return cls(model=model, base_url=base_url or "http://localhost:11434", **kwargs)
     else:
         return cls(model=model, api_key=api_key, **kwargs)
-
-
-# ============================================================
-# 如何在 Agent 范式中替换
-# ============================================================
-"""
-# ── 原来的写法（绑定 Anthropic）──
-import anthropic
-client = anthropic.Anthropic()
-resp = client.messages.create(
-    model="claude-sonnet-4-20250514",
-    max_tokens=500,
-    system=SYSTEM,
-    messages=[{"role": "user", "content": user_msg}],
-    stop_sequences=["Observation:"],
-)
-output = resp.content[0].text
-
-# ── 换成通用写法 ──
-from llm_adapter import LLMClient
-client = LLMClient("anthropic", "claude-sonnet-4-20250514")
-# 或换成任意 provider：
-# client = LLMClient("openai", "gpt-4o")
-# client = LLMClient("deepseek", "deepseek-chat")
-# client = LLMClient("ollama", "qwen2.5:7b")
-
-resp = client.chat(
-    system=SYSTEM,
-    user=user_msg,
-    max_tokens=500,
-    stop=["Observation:"],
-)
-output = resp.text
-# stop_reason 判断：resp.stop_reason == "end_turn" | "stop_sequence" | "max_tokens"
-"""

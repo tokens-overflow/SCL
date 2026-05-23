@@ -10,6 +10,49 @@ ReAct 范式完整示例
 import re
 import anthropic
 
+# ─── 终端彩色输出工具（VSCode Terminal 适用）────────────────────────
+class C:
+    RESET="[0m"; BOLD="[1m"; DIM="[2m"
+    RED="[31m"; GREEN="[32m"; YELLOW="[33m"
+    BLUE="[34m"; MAGENTA="[35m"; CYAN="[36m"
+    BRED="[91m"; BGREEN="[92m"; BYELLOW="[93m"
+    BBLUE="[94m"; BMAGENTA="[95m"; BCYAN="[96m"
+
+def banner(title: str, sub: str = "", width: int = 64) -> None:
+    line = "═" * width
+    print(f"\n{C.BCYAN}{C.BOLD}{line}")
+    print(f"  {title}")
+    if sub:
+        print(f"  {C.DIM}{sub}{C.BCYAN}{C.BOLD}")
+    print(f"{line}{C.RESET}")
+
+def section(title: str) -> None:
+    line = "─" * 60
+    print(f"\n{C.CYAN}{C.BOLD}{line}\n  {title}\n{line}{C.RESET}")
+
+def info(label: str, value: str = "") -> None:
+    if value:
+        print(f"  {C.BBLUE}▸{C.RESET} {C.BOLD}{label}:{C.RESET} {value}")
+    else:
+        print(f"  {C.BBLUE}▸{C.RESET} {label}")
+
+def ok(msg: str) -> None:
+    print(f"  {C.BGREEN}✓{C.RESET} {msg}")
+
+def warn(msg: str) -> None:
+    print(f"  {C.BYELLOW}⚠{C.RESET} {msg}")
+
+def err(msg: str) -> None:
+    print(f"  {C.BRED}✗{C.RESET} {msg}")
+
+def show(label: str, text: str, color: str = "") -> None:
+    color = color or C.YELLOW
+    print(f"\n  {color}{C.BOLD}▣ {label}{C.RESET}")
+    for ln in str(text).split("\n"):
+        print(f"    {ln}")
+# ─────────────────────────────────────────────────────────────
+
+
 client = anthropic.Anthropic()
 
 # ============================================================
@@ -95,51 +138,41 @@ def execute_action(action_line: str) -> str:
 # ReAct 主循环
 # ============================================================
 def react_agent(question: str, max_steps: int = 8) -> str:
-    """
-    ReAct Agent 主函数
-    - 每轮只让 LLM 输出到 Action
-    - 执行工具后把 Observation 追加回 prompt
-    - 循环直到出现 Answer
-    """
     messages = [{"role": "user", "content": question}]
     print(f"\n{'='*60}")
     print(f"问题：{question}")
-    print(f"{'='*60}")
+    print()
 
     for step in range(max_steps):
-        # 调用 LLM，停在 Observation 之前
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=500,
             system=REACT_SYSTEM,
             messages=messages,
-            stop_sequences=["Observation:"],  # 关键：遇到 Observation 就停
+            stop_sequences=["Observation:"],
         )
 
         output = response.content[0].text
-        print(f"\n[Step {step+1}]\n{output}")
+        section(f"Step {step+1}")
+        print(output)
 
-        # 检查是否已有答案
         if "Answer:" in output:
             answer = output.split("Answer:")[-1].strip()
-            print(f"\n{'='*60}")
-            print(f"最终答案：{answer}")
+            show("最终答案", answer, C.BGREEN)
             return answer
 
-        # 解析 Action 并执行工具
         action_match = re.search(r"Action:\s*(.+)", output)
         if not action_match:
             break
 
         action_line = action_match.group(1).strip()
         observation = execute_action(action_line)
-        print(f"Observation: {observation}")
+        info("Observation", observation)
 
-        # 把这一轮的输出 + Observation 追加回 messages
-        # 这就是 ReAct 的"记忆"——所有历史都在 messages 里
         messages.append({"role": "assistant", "content": output + "Observation:"})
         messages.append({"role": "user", "content": f" {observation}\n"})
 
+    warn("超过最大步数，未得到答案")
     return "超过最大步数，未得到答案"
 
 
@@ -147,8 +180,5 @@ def react_agent(question: str, max_steps: int = 8) -> str:
 # 测试
 # ============================================================
 if __name__ == "__main__":
-    # 测试1：需要多步工具调用
     react_agent("北京和上海的人口加起来是多少？")
-
-    # 测试2：天气 + 计算
     react_agent("北京今天适合出门吗？气温超过25度需要防晒")
