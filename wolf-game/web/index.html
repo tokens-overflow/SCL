@@ -101,11 +101,14 @@
     <div class="result-emoji" id="resultEmoji">🏆</div>
     <h2 id="resultTitle">游戏结束</h2>
     <p id="resultSubtitle"></p>
+    <p id="resultJudge" class="result-judge"></p>
     <div class="result-roles" id="resultRoles"></div>
     <button class="btn primary" id="btnPlayAgain">再来一局</button>
   </div>
 </div>
 
+<script src="events.js"></script>
+<script src="memory-layers.js"></script>
 <script src="agents.js"></script>
 <script src="llm-adapter.js"></script>
 <script src="memory.js"></script>
@@ -195,6 +198,8 @@
 
   probeProxy();
   setInterval(probeProxy, 3000);
+  // 拉取 prompts/*.md（外部可编辑的角色 SOP + 系统底板）
+  if (typeof window.refreshPrompts === "function") window.refreshPrompts();
 </script>
 </body>
 </html>

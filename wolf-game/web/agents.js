@@ -56,6 +56,7 @@ class Agent {
 
     // 角色私人信息
     this.knownWolves = [];           // 狼人队友
+    this.wolfTactic = null;          // 仅狼:悍跳狼/冲锋狼/倒钩狼/深水狼
     this.seerChecks = [];            // [{target, isWolf, day}]
     this.witchHasSave = true;
     this.witchHasPoison = true;
@@ -75,11 +76,19 @@ class Agent {
     this.memoryByDay = {};                  // { day: { otherSpeeches: [...], myActions: [...] } }
     // 本局压缩记忆：每天 ≤80 字摘要，是 prompt 实际用到的"激活记忆"，避免上下文爆掉
     this.memoryDigestByDay = {};            // { day: "今日摘要..." }
+
+    // 三层记忆中的"私有层"实例(规格 §2-3)。
+    // facts(append-only) + beliefs(玩家增量更新) + teammates;
+    // 与上述 legacy 字段并存,新代码统一走 this.memory。
+    this.memory = (typeof MemoryLayers !== "undefined")
+      ? new MemoryLayers.PrivateMemory(this.no, null)
+      : null;
   }
 
   reset() {
     this.alive = true;
     this.knownWolves = [];
+    this.wolfTactic = null;
     this.seerChecks = [];
     this.witchHasSave = true;
     this.witchHasPoison = true;
@@ -94,6 +103,9 @@ class Agent {
     this.thinkingLog = [];
     this.memoryByDay = {};
     this.memoryDigestByDay = {};
+    this.memory = (typeof MemoryLayers !== "undefined")
+      ? new MemoryLayers.PrivateMemory(this.no, null)
+      : null;
   }
 
   /* ============ 推理 ============ */
@@ -192,19 +204,28 @@ class Agent {
     }
   }
 
-  async _wolfKill(game) {
-    // ── LLM 决策优先 ──
+  // roundOneVotes = null → 第 1 轮独立提议；
+  // roundOneVotes = [{wolfNo, target, thinking}] → 第 2 轮基于队友提议终选
+  async _wolfKill(game, roundOneVotes = null) {
+    const ctx = this._publicContext(game);
+    if (roundOneVotes) ctx.wolfRoundOne = roundOneVotes;
+    const round = roundOneVotes ? 2 : 1;
     const llmRes = await LLM.decide({
       agent: this, game, kind: "wolf-kill",
-      context: this._publicContext(game),
+      context: ctx,
+      options: { round },
     });
     if (llmRes && Number.isInteger(llmRes.target)) {
+      // A8：允许空刀（target=-1 / target=0 都视为空刀）
+      if (llmRes.target <= 0) {
+        return { type: "wolf-kill", target: -1, thinking: llmRes.thinking || "" };
+      }
       const idx = llmRes.target - 1;  // 座位号 1-12 → idx 0-11
       if (idx >= 0 && idx < 12 &&
           game.agents[idx].alive &&
           !this.knownWolves.includes(idx) &&
           idx !== this.idx) {
-        return { type: "wolf-kill", target: idx };
+        return { type: "wolf-kill", target: idx, thinking: llmRes.thinking || "" };
       }
     }
     // ── 规则版回退 ──
@@ -263,9 +284,10 @@ class Agent {
 
   async _witchAct(game) {
     const actions = [];
+    let savedThisNight = false;
 
-    // ── 救：先问 LLM，无效或异常则用规则 ──
-    if (this.witchHasSave && game.tonightKill !== null) {
+    // ── 救：仅首夜可见刀口（A3/A8），第 2 夜起女巫看不到刀口 → 跳过 ──
+    if (this.witchHasSave && game.day === 1 && game.tonightKill !== null) {
       const killed = game.tonightKill;
       const isSelf = (killed === this.idx);
       let save = null;
@@ -276,20 +298,19 @@ class Agent {
       });
       if (llmSave && typeof llmSave.save === "boolean") {
         save = llmSave.save;
-        // 第 2 夜起不能自救
-        if (save && isSelf && game.day > 1) save = false;
       }
       if (save === null) {
-        // 规则回退
-        if (game.day === 1) save = true;
-        else if (!isSelf && this._isProbablyGod(killed, game)) save = true;
-        else save = false;
+        // 规则回退：首夜默认救人
+        save = true;
       }
-      if (save) actions.push({ type: "witch-save", target: killed });
+      if (save) {
+        actions.push({ type: "witch-save", target: killed });
+        savedThisNight = true;
+      }
     }
 
-    // ── 毒：第 2 夜起 ──
-    if (this.witchHasPoison && game.day >= 2) {
+    // ── 毒：第 2 夜起；A3 同一晚不可解+毒并用，首夜已救则跳过 ──
+    if (this.witchHasPoison && game.day >= 2 && !savedThisNight) {
       const alive = game.aliveAgents().filter(a => a.idx !== this.idx);
       let poisonTarget = null;
       let llmHandled = false;   // LLM 是否给出了有效决策（含"明确不毒"）
@@ -346,10 +367,14 @@ class Agent {
       context: ctx,
     });
     if (llmRes && Number.isInteger(llmRes.target)) {
+      // A3：允许空守（target=-1）
+      if (llmRes.target === -1) {
+        return { type: "guard-protect", target: -1 };
+      }
       const idx = llmRes.target - 1;
       if (idx >= 0 && idx < 12 &&
           game.agents[idx].alive &&
-          idx !== this.lastGuarded) {
+          idx !== this.lastGuarded) {       // A3：不能连续两晚守同一目标
         return { type: "guard-protect", target: idx };
       }
     }
@@ -617,18 +642,27 @@ class Agent {
   }
 
   _ruleDecideRunForSheriff(game) {
+    // 规则版兜底:对齐 prompt 中的角色铁律,默认压低非神位上警概率
     if (this.role === "seer") return true;                          // 预言家必上
     if (this.role === "wolf") {
-      // 狼队：1-2 只悍跳 / 上警混入
-      const wolfUpCount = this.knownWolves.filter(w => game.agents[w]._intendsToRunSheriff).length;
-      const willRun = wolfUpCount < 2 && Math.random() < 0.45 * this.personality.deception;
+      // 狼按战术分工(对齐 role_wolf.md):悍跳必上、倒钩可上、冲锋少上、深水不上
+      let p = 0;
+      switch (this.wolfTactic) {
+        case "悍跳狼": p = 1.0; break;                              // 铁律必上
+        case "倒钩狼": p = 0.60 * this.personality.deception; break; // 站好人立场更可信
+        case "冲锋狼": p = 0.20; break;                             // 偶尔顶身位
+        case "深水狼": p = 0; break;                                // 铁律不上
+        default:       p = 0.30 * this.personality.deception;       // 兜底
+      }
+      const willRun = Math.random() < p;
       this._intendsToRunSheriff = willRun;
       return willRun;
     }
-    if (this.role === "witch")   return Math.random() < 0.25;       // 女巫通常不上警，避免暴露
-    if (this.role === "guard")   return Math.random() < 0.30;
-    if (this.role === "hunter")  return Math.random() < 0.45;       // 猎人偶尔上
-    return Math.random() < 0.30 * (0.5 + this.personality.talkative);
+    if (this.role === "witch")   return Math.random() < 0.05;       // 女巫几乎永不上,避免暴露神职
+    if (this.role === "guard")   return Math.random() < 0.08;       // 守卫同理
+    if (this.role === "hunter")  return Math.random() < 0.20;       // 猎人偶尔上(威慑)
+    // 村民:仅性格极活跃才上(talkative≥0.85 → 约 13%);其余约 5%
+    return Math.random() < 0.10 * Math.max(0, this.personality.talkative - 0.4);
   }
 
   async sheriffVote(game, runners) {
@@ -870,6 +904,12 @@ Agent.prototype._publicContext = function (game) {
       kind: s.kind, text: s.text,
     }));
 
+  // 三层记忆:从 PrivateMemory / PublicLog 抽取要喂给 LLM 的视图
+  const mem = this.memory;
+  const recentFacts = mem ? mem.recentFacts(10).map(f => ({ ...f })) : [];
+  const topSuspicions = mem ? mem.topSuspicions(5) : [];
+  const memTeammates = mem ? mem.teammates.slice() : [];
+
   return {
     day: game.day,
     phase: game.phase,
@@ -878,7 +918,13 @@ Agent.prototype._publicContext = function (game) {
       alive: this.alive, isSheriff: this.isSheriff,
       hasClaimed: this.hasClaimed,           // 自己是否已跳身份
       publicRole: this.publicRole,           // 自己对外声称的身份（null = 未跳）
+      // legacy 字段(向后兼容,旧 prompt 模板还在用)
       knownWolves: this.knownWolves.map(i => game.agents[i].no),
+      // 狼人战术分工(只对狼自己可见,且包含 4 只狼各自分工)
+      wolfTactic: this.wolfTactic,
+      wolfTeam: this.role === "wolf"
+        ? this.knownWolves.map(i => ({ no: game.agents[i].no, tactic: game.agents[i].wolfTactic, alive: game.agents[i].alive }))
+        : null,
       seerChecks: this.seerChecks.map(c => ({ no: game.agents[c.target].no, isWolf: c.isWolf, day: c.day })),
       witchHasSave: this.witchHasSave, witchHasPoison: this.witchHasPoison,
       // V2.8：私有思考日记（最近 5 条），让 LLM 跨轮保持策略一致
@@ -887,6 +933,12 @@ Agent.prototype._publicContext = function (game) {
       // 原始 memoryByDay 仍存活在本对象上、写盘到 memory/agent-N.md，供人工 review 或工具按需读取
       // 取最近 N 天的策略和数据结构由 web/memory.js 维护
       recentMemoryDigests: Memory.recentDigests(this.memoryDigestByDay),
+
+      // ── 三层记忆(规格 §2-3)的私有层视图 ──
+      teammates: memTeammates,         // 仅狼非空,座位号列表
+      privateFacts: recentFacts,        // 最近 10 条 facts(append-only)
+      beliefs: mem ? mem.beliefs : {},  // seat -> {suspicion, reason, updatedAt}
+      topSuspicions,                    // 前 5 个最像狼的(供 prompt 快速渲染)
     },
     players: game.agents.map(a => ({
       no: a.no, name: a.name, alive: a.alive,
@@ -904,5 +956,13 @@ Agent.prototype._publicContext = function (game) {
     roundSummaries: (game.roundSummaries || []).slice(-2),
     sheriffElectionDone: game.sheriffElectionDone,
     wolfHasExploded: game.wolfHasExploded,
+    // 狼人专属：往日狼队夜晚日志（提议 + 终选 + 实际死亡）
+    wolfNightLog: this.role === "wolf" && typeof Events !== "undefined"
+      ? Events.renderWolfNightLog(game.events || [], game.day)
+      : "",
+
+    // ── 三层记忆(规格 §2-3)的公共层视图 ──
+    // 全条目快照,供 prompt 渲染时按需切片;条目本身 frozen,不可篡改
+    publicLogView: game.publicLog ? game.publicLog.snapshot() : [],
   };
 };

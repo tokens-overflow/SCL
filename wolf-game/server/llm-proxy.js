@@ -21,6 +21,54 @@ watchConfig(newCfg => {
 
 const LOG_FILE = path.join(__dirname, "..", "prompts.log");
 const MEMORY_DIR = path.join(__dirname, "..", "memory");
+const LOGS_DIR = path.join(__dirname, "..", "logs");
+const PROMPTS_DIR = path.join(__dirname, "..", "prompts");
+
+// 启动时加载 + 热重载所有 prompts/*.md 文件
+let PROMPTS_CACHE = {};
+function loadPrompts() {
+  const next = {};
+  if (!fs.existsSync(PROMPTS_DIR)) {
+    PROMPTS_CACHE = next;
+    return;
+  }
+  for (const name of fs.readdirSync(PROMPTS_DIR)) {
+    if (!name.endsWith(".md")) continue;
+    const key = name.replace(/\.md$/, "");
+    try {
+      next[key] = fs.readFileSync(path.join(PROMPTS_DIR, name), "utf-8");
+    } catch (e) {
+      console.warn(`[llm-proxy] failed to load prompt ${name}:`, e.message);
+    }
+  }
+  PROMPTS_CACHE = next;
+  console.log(`[llm-proxy] prompts loaded: ${Object.keys(next).join(", ") || "(none)"}`);
+}
+function watchPrompts() {
+  if (!fs.existsSync(PROMPTS_DIR)) return;
+  let timer = null;
+  fs.watch(PROMPTS_DIR, { persistent: false }, () => {
+    clearTimeout(timer);
+    timer = setTimeout(loadPrompts, 300);
+  });
+}
+loadPrompts();
+watchPrompts();
+
+function ensureLogsDir() {
+  if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
+}
+
+function saveReplay(body) {
+  ensureLogsDir();
+  const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "").replace("-", "");
+  // ts 形如 20260523_1530 风格化
+  const safeTs = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const filename = `replay_${safeTs}.json`;
+  const filepath = path.join(LOGS_DIR, filename);
+  fs.writeFileSync(filepath, JSON.stringify(body, null, 2), "utf-8");
+  return filename;
+}
 
 function ensureMemoryDir() {
   if (!fs.existsSync(MEMORY_DIR)) fs.mkdirSync(MEMORY_DIR, { recursive: true });
@@ -85,11 +133,16 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  if (req.method === "GET" && req.url === "/prompts") {
+    return sendJson(res, 200, PROMPTS_CACHE);
+  }
+
   const isLLM = req.method === "POST" && (req.url === "/chat" || req.url === "/decide");
   const isMemoryAppend = req.method === "POST" && req.url === "/memory";
   const isMemoryReset  = req.method === "POST" && req.url === "/memory/reset";
+  const isReplay = req.method === "POST" && req.url === "/replay";
 
-  if (!isLLM && !isMemoryAppend && !isMemoryReset) {
+  if (!isLLM && !isMemoryAppend && !isMemoryReset && !isReplay) {
     res.writeHead(404); res.end("Not found"); return;
   }
 
@@ -109,6 +162,11 @@ const server = http.createServer(async (req, res) => {
           content: parsed.content || "",
         });
         return sendJson(res, 200, { ok: true });
+      }
+      if (isReplay) {
+        const filename = saveReplay(parsed);
+        console.log(`[llm-proxy] replay saved → logs/${filename}`);
+        return sendJson(res, 200, { ok: true, filename });
       }
       // /chat or /decide
       const providerName = parsed.provider || cfg.defaultProvider;

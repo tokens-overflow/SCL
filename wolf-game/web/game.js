@@ -36,6 +36,10 @@ class Game {
     this.speechHistory = [];      // [{day, phase, agentNo, publicRole, kind, text}] —— 让 LLM 看到他人说了什么
     this.roundSummaries = [];     // V2.9-2 每轮复盘：[{day, factual, inference}]
     this.history = [];
+    this.events = [];             // 统一事件流（含 isPublic / visibleTo），见 web/events.js
+    // 三层记忆中的"公共层"(规格 §2-3)
+    // Moderator 唯一写入入口,所有 agent 只读,绝不写死因
+    this.publicLog = (typeof MemoryLayers !== "undefined") ? new MemoryLayers.PublicLog() : null;
     this.running = false;
     this.paused = false;
     this.speedMs = 3500;
@@ -68,6 +72,8 @@ class Game {
     this.speechHistory = [];
     this.roundSummaries = [];
     this.history = [];
+    this.events = [];
+    this.publicLog = (typeof MemoryLayers !== "undefined") ? new MemoryLayers.PublicLog() : null;
     this.winner = null;
     this.sheriffElectionDone = false;
     this.wolfHasExploded = false;
@@ -84,10 +90,26 @@ class Game {
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     this.agents.forEach((a, i) => a.role = shuffled[i]);
-    // 狼人互认队友
+    // 狼人互认队友(idx 用于内部数组,no 用于 LLM-facing 视角)
     const wolves = this.agents.filter(a => a.role === "wolf").map(a => a.idx);
+    // 给 4 只狼随机分配 4 个战术角色(对齐 wolf_strategy 高级战术)
+    const tactics = ["悍跳狼", "冲锋狼", "倒钩狼", "深水狼"];
+    for (let i = tactics.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tactics[i], tactics[j]] = [tactics[j], tactics[i]];
+    }
+    wolves.forEach((idx, k) => {
+      this.agents[idx].wolfTactic = tactics[k];
+    });
     this.agents.forEach(a => {
       if (a.role === "wolf") a.knownWolves = wolves.slice();
+      // PrivateMemory: 同步 role + teammates(座位号 no, 排除自己)
+      if (a.memory) {
+        const teammates = a.role === "wolf"
+          ? wolves.filter(idx => idx !== a.idx).map(idx => this.agents[idx].no)
+          : [];
+        a.memory.setRole(a.role, teammates);
+      }
     });
   }
 
@@ -99,7 +121,49 @@ class Game {
     this.agents.forEach(a => a.observe(evt, this));
     if (evt.type === "check-report") {
       this.publicCheckReports.push(evt);
+      this.emit(new Events.SeerReportEvent(
+        this.day, this.agents[evt.from].no, this.agents[evt.target].no, evt.result
+      ));
+      this.appendPublic({
+        type: "seer-report", day: this.day, phase: "day",
+        fromNo: this.agents[evt.from].no, targetNo: this.agents[evt.target].no,
+        result: evt.result,    // wolf | good —— 是预言家主动跳出来报的,所以允许在公共日志
+      });
+    } else if (evt.type === "claim") {
+      // 跳身份是公开行为(用 claimedRole 字段避免与"真实 role"歧义)
+      this.appendPublic({
+        type: "claim", day: this.day, phase: "day",
+        fromNo: this.agents[evt.from].no, claimedRole: evt.role,
+      });
     }
+  }
+
+  // 推入统一事件流（events.js Event 子类实例）
+  emit(evt) { this.events.push(evt); return evt; }
+
+  // 返回某 agent 视角可见的事件
+  eventsForAgent(agent) {
+    return this.events.filter(e =>
+      typeof e.visibleTo === "function" ? e.visibleTo(agent.role, agent.idx) : true
+    );
+  }
+
+  // PublicLog 唯一写入入口(Moderator 角色)。entry 必须只含公开信息,
+  // 严禁包含 cause/reason 等死因或私密字段(PublicLog.append 会防御性 throw)
+  appendPublic(entry) {
+    if (!this.publicLog) return;
+    try {
+      this.publicLog.append(entry);
+    } catch (e) {
+      // 严重违规:把开发者吼醒,但不让游戏崩
+      console.error("[PublicLog VIOLATION]", e.message, entry);
+    }
+  }
+
+  // 给某 agent 的 PrivateMemory 追加私密事实(seer-check / wolf-kill / 自己用药等)
+  appendFactTo(agentIdx, fact) {
+    const a = this.agents[agentIdx];
+    if (a && a.memory) a.memory.appendFact(fact);
   }
 
   /* ============ 异步流程控制 ============ */
@@ -130,6 +194,7 @@ class Game {
   /* ============ 主流程 ============ */
   async run() {
     this.running = true;
+    this._startedAt = new Date().toISOString();
     UI.bindGame(this);
     UI.renderSeats(this);
     UI.refreshAll(this);
@@ -146,6 +211,10 @@ class Game {
     UI.refreshAll(this);
     UI.showResult(this);
     this.running = false;
+    // 自动落盘 replay JSON（事件流 + 玩家信息 + 胜负），供事后复盘 / 排错
+    this.saveReplay().catch(err => console.warn("[game] saveReplay failed:", err.message));
+    // LLM 法官：异步给出本局解说，到位后注入 result overlay
+    this.runJudge().catch(err => console.warn("[game] judge failed:", err.message));
     // 游戏结束 → 仅在自己仍是"最新一局"时才解锁按钮
     // 否则旧 run() 退出时的 cleanup 会误删新一局刚设置的锁
     if (this.gen === GAME_GENERATION) {
@@ -178,11 +247,21 @@ class Game {
       await this.wait();
       const act = await guard.nightAction(this);
       if (act && act.target !== undefined) {
-        this.tonightProtected = act.target;
-        guard.lastGuarded = act.target;
-        UI.drawSkillLine(guard.idx, act.target, "#4dd0a8");
-        UI.markProtected(act.target);
-        UI.log("skill", `🛡 守卫守护了 <span class="who">${this.agents[act.target].no}号</span>`, this.revealAll);
+        if (act.target === -1) {
+          // A3：空守 —— 不守任何人；下夜可守任何人（含上夜未守的目标）
+          guard.lastGuarded = null;
+          this.emit(new Events.GuardProtectEvent(this.day, guard.idx, -1));
+          this.appendFactTo(guard.idx, { day: this.day, type: "guard-protect", targetNo: -1, note: "空守" });
+          UI.log("skill", `🛡 守卫选择空守（不守人）`, this.revealAll);
+        } else {
+          this.tonightProtected = act.target;
+          guard.lastGuarded = act.target;
+          this.emit(new Events.GuardProtectEvent(this.day, guard.idx, this.agents[act.target].no));
+          this.appendFactTo(guard.idx, { day: this.day, type: "guard-protect", targetNo: this.agents[act.target].no });
+          UI.drawSkillLine(guard.idx, act.target, "#4dd0a8");
+          UI.markProtected(act.target);
+          UI.log("skill", `🛡 守卫守护了 <span class="who">${this.agents[act.target].no}号</span>`, this.revealAll);
+        }
       }
       UI.deactivate(guard.idx);
       await this.wait();
@@ -194,45 +273,74 @@ class Game {
     wolves.forEach(w => UI.activate(w.idx));
     await this.wait();
     if (wolves.length > 0) {
-      // ★ 4 只狼并发问 LLM 拿出协商目标
-      const acts = await Promise.all(wolves.map(w => w._wolfKill(this)));
+      // ★ 两轮协商：第 1 轮独立提议 → 把所有提议公示 → 第 2 轮终选
+      //   只剩 1 只狼时，直接走第 1 轮
+      const r1Acts = await Promise.all(wolves.map(w => w._wolfKill(this, null)));
+      // 记录第 1 轮提议事件（仅狼可见）；target=-1 → 空刀
+      wolves.forEach((w, i) => {
+        const act = r1Acts[i];
+        if (act && act.target != null) {
+          const targetNo = act.target === -1 ? -1 : this.agents[act.target].no;
+          this.emit(new Events.WolfProposeKillEvent(
+            this.day, w.no, targetNo, act.thinking || "", 1
+          ));
+          // PrivateMemory: 这只狼自己记下自己的提议(其他狼不通过 facts 看,通过下一轮 prompt 看)
+          this.appendFactTo(w.idx, { day: this.day, type: "wolf-propose", round: 1, targetNo, thinking: act.thinking || "" });
+        }
+      });
+      let finalActs = r1Acts;
+      if (wolves.length > 1) {
+        const roundOneVotes = wolves.map((w, i) => {
+          const act = r1Acts[i];
+          if (!act || act.target == null) return null;
+          return {
+            wolfNo: w.no,
+            target: act.target === -1 ? "空刀" : this.agents[act.target].no,
+            thinking: act.thinking || "",
+          };
+        }).filter(Boolean);
+        if (this.revealAll && roundOneVotes.length) {
+          UI.log("hint", `🐺 第 1 轮提议：${roundOneVotes.map(v => `${v.wolfNo}→${v.target}`).join("、")}`, this.revealAll);
+        }
+        finalActs = await Promise.all(wolves.map(w => w._wolfKill(this, roundOneVotes)));
+        wolves.forEach((w, i) => {
+          const act = finalActs[i];
+          if (act && act.target != null) {
+            const targetNo = act.target === -1 ? -1 : this.agents[act.target].no;
+            this.emit(new Events.WolfProposeKillEvent(
+              this.day, w.no, targetNo, act.thinking || "", 2
+            ));
+          }
+        });
+      }
+      // 统计：-1 也可成为多数派 → 空刀
       const votes = {};
-      acts.forEach(act => {
+      finalActs.forEach(act => {
         if (act) votes[act.target] = (votes[act.target] || 0) + 1;
       });
       let target = null, max = 0;
       for (const k of Object.keys(votes)) {
         if (votes[k] > max) { max = votes[k]; target = parseInt(k); }
       }
-      if (target !== null) {
+      if (target !== null && target !== -1) {
         this.tonightKill = target;
+        this.emit(new Events.WolfKillEvent(this.day, this.agents[target].no));
         UI.drawSkillLine(wolves[0].idx, target, "#ff5b6b", true);
         UI.shake(target);
         UI.log("skill", `🐺 狼人选择击杀 <span class="who">${this.agents[target].no}号</span>`, this.revealAll);
+        // PrivateMemory: 每只狼记下"今晚我们刀了 X 号"(私密事实,只狼可见)
+        wolves.forEach(w => this.appendFactTo(w.idx, { day: this.day, type: "wolf-kill-final", targetNo: this.agents[target].no }));
+      } else {
+        // A8 空刀：tonightKill 保持 null
+        this.emit(new Events.WolfKillEvent(this.day, -1));
+        UI.log("skill", `🐺 狼人选择空刀（不杀人）`, this.revealAll);
+        wolves.forEach(w => this.appendFactTo(w.idx, { day: this.day, type: "wolf-kill-final", targetNo: -1, note: "空刀" }));
       }
     }
     wolves.forEach(w => UI.deactivate(w.idx));
     await this.wait();
 
-    // ===== 预言家 =====
-    const seer = this.aliveOf("seer")[0];
-    if (seer) {
-      UI.setPhase("night", this.day, "预言家请睁眼…");
-      UI.activate(seer.idx);
-      await this.wait();
-      const act = await seer.nightAction(this);
-      if (act && act.target !== undefined) {
-        const target = this.agents[act.target];
-        const isWolf = target.role === "wolf";
-        seer.seerChecks.push({ target: act.target, isWolf, day: this.day });
-        UI.drawSkillLine(seer.idx, act.target, isWolf ? "#ff5b6b" : "#4ea8ff");
-        UI.log("skill", `🔮 预言家查验 <span class="who">${target.no}号</span> → ${isWolf ? "🐺 狼人" : "👤 好人"}`, this.revealAll);
-      }
-      UI.deactivate(seer.idx);
-      await this.wait();
-    }
-
-    // ===== 女巫 =====
+    // ===== 女巫（A4：守→狼→女→预，女巫先于预言家）=====
     const witch = this.aliveOf("witch")[0];
     if (witch) {
       UI.setPhase("night", this.day, "女巫请睁眼…");
@@ -244,11 +352,15 @@ class Game {
           if (act.type === "witch-save") {
             witch.witchHasSave = false;
             this.tonightSaved = true;
+            this.emit(new Events.WitchSaveEvent(this.day, witch.idx, this.agents[act.target].no));
+            this.appendFactTo(witch.idx, { day: this.day, type: "witch-save", targetNo: this.agents[act.target].no });
             UI.drawSkillLine(witch.idx, act.target, "#4dd0a8");
             UI.log("skill", `🧪 女巫使用解药救人`, this.revealAll);
           } else if (act.type === "witch-poison") {
             witch.witchHasPoison = false;
             this.tonightPoison = act.target;
+            this.emit(new Events.WitchPoisonEvent(this.day, witch.idx, this.agents[act.target].no));
+            this.appendFactTo(witch.idx, { day: this.day, type: "witch-poison", targetNo: this.agents[act.target].no });
             UI.drawSkillLine(witch.idx, act.target, "#b46bff");
             UI.markPoisoned(act.target);
             UI.log("skill", `🧪 女巫使用毒药 → <span class="who">${this.agents[act.target].no}号</span>`, this.revealAll);
@@ -256,6 +368,26 @@ class Game {
         }
       }
       UI.deactivate(witch.idx);
+      await this.wait();
+    }
+
+    // ===== 预言家（最后行动，查验不影响死亡结算）=====
+    const seer = this.aliveOf("seer")[0];
+    if (seer) {
+      UI.setPhase("night", this.day, "预言家请睁眼…");
+      UI.activate(seer.idx);
+      await this.wait();
+      const act = await seer.nightAction(this);
+      if (act && act.target !== undefined) {
+        const target = this.agents[act.target];
+        const isWolf = target.role === "wolf";
+        seer.seerChecks.push({ target: act.target, isWolf, day: this.day });
+        this.emit(new Events.SeerCheckEvent(this.day, seer.idx, seer.no, target.no, isWolf));
+        this.appendFactTo(seer.idx, { day: this.day, type: "seer-check", targetNo: target.no, isWolf, result: isWolf ? "wolf" : "good" });
+        UI.drawSkillLine(seer.idx, act.target, isWolf ? "#ff5b6b" : "#4ea8ff");
+        UI.log("skill", `🔮 预言家查验 <span class="who">${target.no}号</span> → ${isWolf ? "🐺 狼人" : "👤 好人"}`, this.revealAll);
+      }
+      UI.deactivate(seer.idx);
       await this.wait();
     }
 
@@ -422,6 +554,8 @@ class Game {
     UI.setLatestSpeech(agent, text);
     UI.log("day", `<span class="who">${agent.no}号 ${agent.name}</span>：${text}`);
     this.speechHistory.push({ day: this.day, phase: this.phase, agentNo: agent.no, publicRole: agent.publicRole, kind: "day", text });
+    this.emit(new Events.SpeakEvent(this.day, this.phase, agent.no, agent.publicRole, "day", text));
+    this.appendPublic({ type: "speak", day: this.day, phase: "day", agentNo: agent.no, publicRole: agent.publicRole, kind: "day", text });
     // 语音朗读（开启时等其播完，关闭时立即 resolve）
     await TTS.speak(text, agent);
     // 阅读时间：未开 TTS 时给充足阅读节奏；开了 TTS 时仅留少量缓冲
@@ -442,6 +576,8 @@ class Game {
     UI.bubble(idx, a.name + "（自爆）", `我是狼人，自爆！`);
     UI.setLatestSpeech(a, "我是狼人，自爆！", false);
     UI.log("death", `💥 <span class="who">${a.no}号 ${a.name}</span> 自爆，亮明狼人身份！`);
+    this.emit(new Events.WolfExplodeEvent(this.day, a.no));
+    this.appendPublic({ type: "wolf-explode", day: this.day, phase: "day", wolfNo: a.no });
     // 全场震动效果
     for (let i = 0; i < 12; i++) UI.shake(i);
     await this.wait(Math.max(900, this.speedMs));
@@ -519,13 +655,21 @@ class Game {
   }
 
   _setSheriff(idx) {
-    if (this.sheriffIdx >= 0) {
-      this.agents[this.sheriffIdx].isSheriff = false;
-      UI.unmarkSheriff(this.sheriffIdx);
+    const fromIdx = this.sheriffIdx;
+    if (fromIdx >= 0) {
+      this.agents[fromIdx].isSheriff = false;
+      UI.unmarkSheriff(fromIdx);
     }
     this.sheriffIdx = idx;
     this.agents[idx].isSheriff = true;
     UI.markSheriff(idx);
+    if (fromIdx < 0) {
+      this.emit(new Events.SheriffElectedEvent(this.day, this.agents[idx].no));
+      this.appendPublic({ type: "sheriff-elected", day: this.day, phase: "day", sheriffNo: this.agents[idx].no });
+    } else {
+      this.emit(new Events.BadgePassEvent(this.day, this.agents[fromIdx].no, this.agents[idx].no));
+      this.appendPublic({ type: "badge-pass", day: this.day, phase: "day", fromNo: this.agents[fromIdx].no, toNo: this.agents[idx].no });
+    }
   }
 
   async _sheriffSpeech(agent) {
@@ -536,6 +680,8 @@ class Game {
     UI.setLatestSpeech(agent, text);
     UI.log("day", `🎖 <span class="who">${agent.no}号 ${agent.name}</span>：${text}`);
     this.speechHistory.push({ day: this.day, phase: this.phase, agentNo: agent.no, publicRole: agent.publicRole, kind: "sheriff", text });
+    this.emit(new Events.SpeakEvent(this.day, this.phase, agent.no, agent.publicRole, "sheriff", text));
+    this.appendPublic({ type: "speak", day: this.day, phase: "day", agentNo: agent.no, publicRole: agent.publicRole, kind: "sheriff", text });
     await TTS.speak(text, agent);
     const ms = TTS.enabled ? 300 : Math.max(1200, this.speedMs * 1.4);
     await this.wait(ms);
@@ -570,6 +716,8 @@ class Game {
     UI.setLatestSpeech(a, text);
     UI.log("vote", `🆚 <span class="who">${a.no}号 ${a.name}</span>：${text}`);
     this.speechHistory.push({ day: this.day, phase: this.phase, agentNo: a.no, publicRole: a.publicRole, kind: "pk", text });
+    this.emit(new Events.SpeakEvent(this.day, this.phase, a.no, a.publicRole, "pk", text));
+    this.appendPublic({ type: "speak", day: this.day, phase: "day", agentNo: a.no, publicRole: a.publicRole, kind: "pk", text });
     await TTS.speak(text, a);
     await this.wait(TTS.enabled ? 300 : Math.max(1200, this.speedMs * 1.4));
     UI.clearSpeaking(idx);
@@ -590,8 +738,12 @@ class Game {
         UI.showVoteOn(t, tally[t]);
         UI.drawSkillLine(v.idx, t, "#ffd97a");
         UI.log("vote", `<span class="who">${v.no}号</span> 选 ${this.agents[t].no}号`);
+        this.emit(new Events.VoteEvent(this.day, v.no, this.agents[t].no, "sheriff-vote"));
+        this.appendPublic({ type: "vote", day: this.day, phase: "day", fromNo: v.no, targetNo: this.agents[t].no, kind: "sheriff-vote" });
       } else {
         UI.log("vote", `<span class="who">${v.no}号</span> 弃投`);
+        this.emit(new Events.VoteEvent(this.day, v.no, -1, "sheriff-vote"));
+        this.appendPublic({ type: "vote", day: this.day, phase: "day", fromNo: v.no, targetNo: -1, kind: "sheriff-vote" });
       }
       await this.wait(Math.min(380, this.speedMs * 0.4));
     }
@@ -660,6 +812,8 @@ class Game {
     UI.setLatestSpeech(agent, text, true);
     UI.log("death", `<span class="who">${agent.no}号 ${agent.name} 遗言</span>：${text}`);
     this.speechHistory.push({ day: this.day, phase: this.phase, agentNo: agent.no, publicRole: agent.publicRole, kind: "last-words", text });
+    this.emit(new Events.SpeakEvent(this.day, this.phase, agent.no, agent.publicRole, "last-words", text));
+    this.appendPublic({ type: "speak", day: this.day, phase: "day", agentNo: agent.no, publicRole: agent.publicRole, kind: "last-words", text });
     await TTS.speak(text, agent);
     await this.wait(TTS.enabled ? 300 : Math.max(1500, this.speedMs * 1.8));
 
@@ -693,6 +847,8 @@ class Game {
     UI.drawSkillLine(idx, target.idx, "#ff8b3d", true);
     UI.shake(target.idx);
     await this.wait(800);
+    // PublicLog: 猎人开枪是公开事件
+    this.appendPublic({ type: "hunter-shot", day: this.day, phase: this.phase, hunterNo: hunter.no, targetNo: target.no });
     await this.kill(target.idx, "shot");
     // 被开枪的若是猎人也开枪（链式）
     if (target.role === "hunter") {
@@ -745,6 +901,9 @@ class Game {
     }
 
     if (executed >= 0) {
+      this.emit(new Events.ExecuteEvent(this.day, this.agents[executed].no, "vote"));
+      // PublicLog: 处决是公开事件,但 reason 字段(vote/pk)只对外说"投票")
+      this.appendPublic({ type: "execute", day: this.day, phase: "day", targetNo: this.agents[executed].no, kind: "vote" });
       await this.lastWords(executed);
       await this.kill(executed, "voted");
       const a = this.agents[executed];
@@ -788,12 +947,16 @@ class Game {
       const weight = voter.isSheriff ? 1.5 : 1;
       if (targetIdx === -1 || tally[targetIdx] === undefined) {
         UI.log("vote", `<span class="who">${voter.no}号</span>${voter.isSheriff ? " 🎖" : ""} 弃票`);
+        this.emit(new Events.VoteEvent(this.day, voter.no, -1, "vote"));
+        this.appendPublic({ type: "vote", day: this.day, phase: "day", fromNo: voter.no, targetNo: -1, kind: "vote" });
       } else {
         tally[targetIdx] = (tally[targetIdx] || 0) + weight;
         UI.showVoteOn(targetIdx, tally[targetIdx]);
         UI.drawSkillLine(voter.idx, targetIdx, "#ffcf6b");
         UI.log("vote", `<span class="who">${voter.no}号</span>${voter.isSheriff ? " 🎖" : ""} → ${this.agents[targetIdx].no}号${voter.isSheriff ? "（1.5）" : ""}`);
         this.fireEvent({ type: "vote", from: voter.idx, target: targetIdx });
+        this.emit(new Events.VoteEvent(this.day, voter.no, this.agents[targetIdx].no, "vote"));
+        this.appendPublic({ type: "vote", day: this.day, phase: "day", fromNo: voter.no, targetNo: this.agents[targetIdx].no, kind: "vote" });
       }
       await this.wait(Math.min(380, this.speedMs * 0.4));
     }
@@ -807,15 +970,22 @@ class Game {
     if (!a.alive) return;
     a.alive = false;
     this.history.push({ idx, day: this.day, cause });
+    this.emit(new Events.DeathEvent(this.day, this.phase, a.no));
     UI.markDead(idx);
+    // A6/A8：夜晚死讯不报死因（狼刀 / 毒 / 同守同救对外不可分辨），
+    //        白天事件（shot/voted/explode）本就公开，可显示。
+    //        god 视角 (revealAll) 始终显示完整 cause。
     const causeLabel =
       cause === "night" ? "夜晚" :
       cause === "shot" ? "枪杀" :
       cause === "voted" ? "放逐" :
       cause === "explode" ? "自爆" :
       "死亡";
-    UI.log("death", `💀 ${a.no}号 ${a.name} 倒下（${causeLabel}）`);
+    const hidesCause = cause === "night" && !this.revealAll;
+    UI.log("death", `💀 ${a.no}号 ${a.name} 倒下${hidesCause ? "" : `（${causeLabel}）`}`);
     UI.updateAliveCounter(this);
+    // PublicLog: 死讯只含座位号 + 阶段(night/day),绝不含 cause(规格核心红线)
+    this.appendPublic({ type: "death", day: this.day, phase: this.phase, targetNo: a.no });
 
     // 警徽流转：
     //   night / voted —— 死者会在 lastWords 中亲自传徽，这里不动
@@ -835,6 +1005,68 @@ class Game {
   }
 
   /* ============ 胜负 ============ */
+  /* ============ LLM 法官 ============ */
+  async runJudge() {
+    const hook = (typeof window !== "undefined") ? window.LLM_HOOK : null;
+    if (!hook || !hook.enabled || typeof hook.judge !== "function") return;
+    UI.setJudgeText("📜 法官正在解说本局…");
+    const text = await hook.judge({
+      winner: this.winner,
+      players: this.agents.map(a => ({
+        no: a.no, name: a.name, role: a.role,
+        personality: a.personality.name,
+        alive: a.alive, isSheriff: a.isSheriff,
+      })),
+      events: (this.events || []).map(e => typeof e.toJSON === "function" ? e.toJSON() : { ...e }),
+      history: this.history,
+    });
+    if (text && text.trim()) {
+      UI.setJudgeText("📜 " + text.trim());
+    } else {
+      UI.setJudgeText("");
+    }
+  }
+
+  /* ============ Replay 落盘 ============ */
+  async saveReplay() {
+    const base = (() => {
+      if (typeof window === "undefined") return "http://127.0.0.1:3001";
+      if (window.electron?.proxyPort) return `http://127.0.0.1:${window.electron.proxyPort}`;
+      const p = new URLSearchParams(location.search).get("port");
+      return `http://127.0.0.1:${p ? Number(p) : 3001}`;
+    })();
+    const body = {
+      gen: this.gen,
+      startedAt: this._startedAt || null,
+      endedAt: new Date().toISOString(),
+      day: this.day,
+      winner: this.winner,
+      sheriffIdx: this.sheriffIdx,
+      wolfHasExploded: this.wolfHasExploded,
+      players: this.agents.map(a => ({
+        idx: a.idx, no: a.no, name: a.name,
+        role: a.role,
+        personality: a.personality.name,
+        alive: a.alive,
+        publicRole: a.publicRole,
+        isSheriff: a.isSheriff,
+      })),
+      events: (this.events || []).map(e => typeof e.toJSON === "function" ? e.toJSON() : { ...e }),
+      history: this.history,
+      roundSummaries: this.roundSummaries,
+      publicCheckReports: this.publicCheckReports,
+    };
+    const resp = await fetch(`${base}/replay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) throw new Error(`replay save ${resp.status}: ${await resp.text()}`);
+    const data = await resp.json();
+    console.log(`[game] replay 已保存：logs/${data.filename}`);
+    return data.filename;
+  }
+
   checkWin() {
     const aliveWolves = this.aliveOf("wolf").length;
     const aliveGods = this.aliveAgents().filter(a => ["seer","witch","hunter","guard"].includes(a.role)).length;
@@ -1145,12 +1377,18 @@ const UI = {
   },
 
   /* ============ 结算面板 ============ */
+  setJudgeText(text) {
+    const el = document.getElementById("resultJudge");
+    if (el) el.textContent = text || "";
+  },
+
   showResult(game) {
     const overlay = document.getElementById("resultOverlay");
     const emoji = document.getElementById("resultEmoji");
     const title = document.getElementById("resultTitle");
     const subtitle = document.getElementById("resultSubtitle");
     const roles = document.getElementById("resultRoles");
+    const judge = document.getElementById("resultJudge");
 
     if (game.winner === "good") {
       emoji.textContent = "🏆";
@@ -1161,6 +1399,7 @@ const UI = {
       title.textContent = "狼人阵营胜利";
       subtitle.textContent = "屠刀已悬，村庄沦陷";
     }
+    if (judge) judge.textContent = "";
     roles.innerHTML = "";
     game.agents.forEach(a => {
       const m = ROLE_META[a.role];

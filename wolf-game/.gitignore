@@ -2,9 +2,15 @@
 prompts.log
 launcher.log
 memory/
+logs/
 
-# 本地敏感配置（如需独立保存真 key，把 config.json 改名后加进这里）
-# config.local.json
+# 本地敏感配置：config.json 含真实 API key，绝不入库
+# 团队成员从 config.example.json 复制并填入自己的 key
+config.json
+config.local.json
+
+# macOS
+.DS_Store
 
 # 编辑器
 .vscode/

@@ -17,7 +17,11 @@ function isConfigured(providerConf) {
 
 function loadConfig() {
   if (!fs.existsSync(CONFIG_PATH)) {
-    throw new Error(`config.json not found at ${CONFIG_PATH}`);
+    const exampleHint = `cp config.example.json config.json && # then edit config.json to fill in your real API key`;
+    throw new Error(
+      `config.json not found at ${CONFIG_PATH}\n` +
+      `→ 首次使用请从模板复制并填入你的 API key:\n  ${exampleHint}`
+    );
   }
   const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
   const providers = raw.providers || {};

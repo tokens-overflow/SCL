@@ -31,10 +31,41 @@ async function callClaude(conf, { system, user, tools, maxTokens }) {
   const data = await resp.json();
   if (tools?.length) {
     const tu = (data.content || []).find(c => c.type === "tool_use");
-    return { toolName: tu?.name || null, input: tu?.input || null };
+    if (tu) return { toolName: tu.name, input: tu.input || null };
+    // Fallback: 模型没走 tool_use，从 text 段提取 JSON
+    const txt = (data.content || []).find(c => c.type === "text")?.text || "";
+    const parsed = extractJson(txt);
+    return { toolName: parsed ? tools[0].name : null, input: parsed };
   }
   const txt = (data.content || []).find(c => c.type === "text");
   return { text: txt?.text || "" };
+}
+
+// 从文本里抠 JSON：先找 ```json 块，再找首个 {...} 平衡块
+function extractJson(text) {
+  if (!text || typeof text !== "string") return null;
+  const block = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  const candidate = block ? block[1] : text;
+  // 找首个 { 到与之配对的 } —— 简易栈匹配，跳过字符串里的 }
+  const start = candidate.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < candidate.length; i++) {
+    const ch = candidate[i];
+    if (esc) { esc = false; continue; }
+    if (ch === "\\") { esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(candidate.slice(start, i + 1)); }
+        catch { return null; }
+      }
+    }
+  }
+  return null;
 }
 
 async function callOpenAICompat(conf, { system, user, tools, maxTokens, extraBody }) {
@@ -62,14 +93,19 @@ async function callOpenAICompat(conf, { system, user, tools, maxTokens, extraBod
   });
   if (!resp.ok) throw new Error(`OpenAI-compat ${resp.status}: ${await resp.text()}`);
   const data = await resp.json();
+  const msg = data.choices?.[0]?.message;
   if (tools?.length) {
-    const tc = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!tc) return { toolName: null, input: null };
-    let input = null;
-    try { input = JSON.parse(tc.function.arguments); } catch {}
-    return { toolName: tc.function.name, input };
+    const tc = msg?.tool_calls?.[0];
+    if (tc) {
+      let input = null;
+      try { input = JSON.parse(tc.function.arguments); } catch {}
+      return { toolName: tc.function.name, input };
+    }
+    // Fallback: 模型没调 tool 而是吐了 JSON 文本
+    const parsed = extractJson(msg?.content || "");
+    return { toolName: parsed ? tools[0].name : null, input: parsed };
   }
-  return { text: data.choices?.[0]?.message?.content || "" };
+  return { text: msg?.content || "" };
 }
 
 // DeepSeek V4 reasoner 默认开 thinking，但 thinking 模式不支持 tool_calls，

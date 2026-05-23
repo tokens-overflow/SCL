@@ -1,5 +1,5 @@
 {
-  "defaultProvider": "claude",
+  "defaultProvider": "deepseek",
   "port": 3001,
   "maxTokens": 200,
   "providers": {
