@@ -19,6 +19,68 @@ import json
 import anthropic
 from dataclasses import dataclass, field
 
+# ─── 终端彩色输出工具（VSCode Terminal 适用）────────────────────────
+class C:
+    RESET="[0m"; BOLD="[1m"; DIM="[2m"
+    RED="[31m"; GREEN="[32m"; YELLOW="[33m"
+    BLUE="[34m"; MAGENTA="[35m"; CYAN="[36m"
+    BRED="[91m"; BGREEN="[92m"; BYELLOW="[93m"
+    BBLUE="[94m"; BMAGENTA="[95m"; BCYAN="[96m"
+
+def banner(title: str, sub: str = "", width: int = 64) -> None:
+    line = "═" * width
+    print(f"\n{C.BCYAN}{C.BOLD}{line}")
+    print(f"  {title}")
+    if sub:
+        print(f"  {C.DIM}{sub}{C.BCYAN}{C.BOLD}")
+    print(f"{line}{C.RESET}")
+
+def section(title: str) -> None:
+    line = "─" * 60
+    print(f"\n{C.CYAN}{C.BOLD}{line}\n  {title}\n{line}{C.RESET}")
+
+def info(label: str, value: str = "") -> None:
+    if value:
+        print(f"  {C.BBLUE}▸{C.RESET} {C.BOLD}{label}:{C.RESET} {value}")
+    else:
+        print(f"  {C.BBLUE}▸{C.RESET} {label}")
+
+def ok(msg: str) -> None:
+    print(f"  {C.BGREEN}✓{C.RESET} {msg}")
+
+def warn(msg: str) -> None:
+    print(f"  {C.BYELLOW}⚠{C.RESET} {msg}")
+
+def err(msg: str) -> None:
+    print(f"  {C.BRED}✗{C.RESET} {msg}")
+
+def show(label: str, text: str, color: str = "") -> None:
+    color = color or C.YELLOW
+    print(f"\n  {color}{C.BOLD}▣ {label}{C.RESET}")
+    for ln in str(text).split("\n"):
+        print(f"    {ln}")
+# ─────────────────────────────────────────────────────────────
+
+def safe_json(text: str) -> dict:
+    """容错 JSON 解析：剥除 markdown 代码块，提取内嵌 JSON 对象"""
+    import re as _re
+    cleaned = text.strip()
+    cleaned = _re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+    cleaned = _re.sub(r"\n?```\s*$", "", cleaned).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        m = _re.search(r"(\{[\s\S]*?\}|\[[\s\S]*?\])", cleaned)
+        if m:
+            try:
+                return json.loads(m.group(1))
+            except json.JSONDecodeError:
+                pass
+        warn(f"JSON 解析失败 (前80字): {cleaned[:80]}")
+        return {}
+
+
+
 client = anthropic.Anthropic()
 
 # ============================================================
@@ -26,10 +88,10 @@ client = anthropic.Anthropic()
 # ============================================================
 @dataclass
 class ThoughtNode:
-    thought: str           # 这一步的思考内容
-    score: float = 0.0     # 评分（0-10）
-    depth: int = 0         # 当前深度
-    parent: str = ""       # 父节点 thought（用于追溯路径）
+    thought: str
+    score: float = 0.0
+    depth: int = 0
+    parent: str = ""
     children: list = field(default_factory=list)
 
 
@@ -77,7 +139,7 @@ EVALUATE_SYSTEM = """你是一个推理质量评估专家。
 {
   "score": 0-10的浮点数,
   "reasoning": "评分理由（一句话）",
-  "promising": true/false  // 是否值得继续探索
+  "promising": true/false
 }
 
 只输出 JSON，不要其他文字。
@@ -106,19 +168,17 @@ CONCLUDE_SYSTEM = """你是一个推理总结专家。
 # ============================================================
 def tree_of_thoughts(
     problem: str,
-    branches: int = 3,    # 每次展开几个分支
-    depth: int = 2,       # 探索深度
-    beam_width: int = 2   # 每层保留几个最优节点
+    branches: int = 3,
+    depth: int = 2,
+    beam_width: int = 2
 ) -> str:
     print(f"\n{'='*60}")
     print(f"问题：{problem}")
     print(f"配置：branches={branches}, depth={depth}, beam_width={beam_width}")
-    print(f"{'='*60}")
+    print()
 
-    # 初始节点：空思路，从问题出发
     current_beam = [ThoughtNode(thought=f"开始分析问题：{problem}", depth=0, score=5.0)]
-
-    all_nodes = []  # 记录所有探索过的节点
+    all_nodes = []
 
     for d in range(depth):
         print(f"\n🌳 [深度 {d+1}/{depth}]")
@@ -127,11 +187,9 @@ def tree_of_thoughts(
         for node in current_beam:
             print(f"\n  当前节点（分数 {node.score:.1f}）：{node.thought[:60]}...")
 
-            # Step 1：展开候选分支
             candidates = expand_node(problem, node, branches)
             print(f"  展开了 {len(candidates)} 个候选分支")
 
-            # Step 2：评估每个候选
             for candidate in candidates:
                 score_info = evaluate_node(problem, node, candidate)
                 child_node = ThoughtNode(
@@ -145,7 +203,6 @@ def tree_of_thoughts(
                 all_nodes.append(child_node)
                 print(f"  候选（分数 {score_info['score']:.1f}）：{candidate[:50]}... | {score_info['reasoning']}")
 
-        # Step 3：Beam Search —— 只保留 top-k
         next_beam.sort(key=lambda x: x.score, reverse=True)
         current_beam = next_beam[:beam_width]
 
@@ -153,7 +210,6 @@ def tree_of_thoughts(
         for node in current_beam:
             print(f"  ★ 分数 {node.score:.1f}：{node.thought[:60]}...")
 
-    # Step 4：找到最优路径
     best_node = max(current_beam, key=lambda x: x.score)
     best_path = reconstruct_path(best_node, all_nodes + [ThoughtNode(
         thought=f"开始分析问题：{problem}", depth=0, score=5.0
@@ -163,7 +219,6 @@ def tree_of_thoughts(
     for i, thought in enumerate(best_path):
         print(f"  Step {i}: {thought[:80]}...")
 
-    # Step 5：基于最优路径得出答案
     print(f"\n💡 [得出最终答案]")
     final_answer = conclude(problem, best_path)
 
@@ -173,7 +228,6 @@ def tree_of_thoughts(
 
 
 def expand_node(problem: str, node: ThoughtNode, n: int) -> list[str]:
-    """展开节点，生成 n 个候选下一步"""
     system = EXPAND_SYSTEM.format(n=n)
 
     response = client.messages.create(
@@ -187,16 +241,14 @@ def expand_node(problem: str, node: ThoughtNode, n: int) -> list[str]:
     )
 
     text = response.content[0].text.strip()
-    text = text.replace("```json", "").replace("```", "").strip()
     try:
-        result = json.loads(text)
+        result = safe_json(text)
         return [c["thought"] for c in result.get("candidates", [])]
     except:
         return [f"继续推理：{problem}"]
 
 
 def evaluate_node(problem: str, parent: ThoughtNode, candidate: str) -> dict:
-    """评估候选节点的质量"""
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=200,
@@ -208,15 +260,13 @@ def evaluate_node(problem: str, parent: ThoughtNode, candidate: str) -> dict:
     )
 
     text = response.content[0].text.strip()
-    text = text.replace("```json", "").replace("```", "").strip()
     try:
-        return json.loads(text)
+        return safe_json(text)
     except:
         return {"score": 5.0, "reasoning": "评估异常", "promising": True}
 
 
 def conclude(problem: str, path: list[str]) -> str:
-    """基于最优路径得出最终答案"""
     path_text = "\n".join([f"Step {i}: {thought}" for i, thought in enumerate(path)])
 
     response = client.messages.create(
@@ -232,7 +282,6 @@ def conclude(problem: str, path: list[str]) -> str:
 
 
 def reconstruct_path(node: ThoughtNode, all_nodes: list[ThoughtNode]) -> list[str]:
-    """从叶节点回溯到根节点，重建完整推理路径"""
     path = [node.thought]
     current = node
 
@@ -253,7 +302,6 @@ def reconstruct_path(node: ThoughtNode, all_nodes: list[ThoughtNode]) -> list[st
 # 测试
 # ============================================================
 if __name__ == "__main__":
-    # 适合 ToT 的问题：需要多角度探索的复杂推理
     tree_of_thoughts(
         problem="一家初创公司应该先做产品还是先找融资？从创始人视角分析这个决策。",
         branches=3,

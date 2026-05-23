@@ -13,6 +13,68 @@ Multi-Agent 范式完整示例
 import json
 import anthropic
 
+# ─── 终端彩色输出工具（VSCode Terminal 适用）────────────────────────
+class C:
+    RESET="[0m"; BOLD="[1m"; DIM="[2m"
+    RED="[31m"; GREEN="[32m"; YELLOW="[33m"
+    BLUE="[34m"; MAGENTA="[35m"; CYAN="[36m"
+    BRED="[91m"; BGREEN="[92m"; BYELLOW="[93m"
+    BBLUE="[94m"; BMAGENTA="[95m"; BCYAN="[96m"
+
+def banner(title: str, sub: str = "", width: int = 64) -> None:
+    line = "═" * width
+    print(f"\n{C.BCYAN}{C.BOLD}{line}")
+    print(f"  {title}")
+    if sub:
+        print(f"  {C.DIM}{sub}{C.BCYAN}{C.BOLD}")
+    print(f"{line}{C.RESET}")
+
+def section(title: str) -> None:
+    line = "─" * 60
+    print(f"\n{C.CYAN}{C.BOLD}{line}\n  {title}\n{line}{C.RESET}")
+
+def info(label: str, value: str = "") -> None:
+    if value:
+        print(f"  {C.BBLUE}▸{C.RESET} {C.BOLD}{label}:{C.RESET} {value}")
+    else:
+        print(f"  {C.BBLUE}▸{C.RESET} {label}")
+
+def ok(msg: str) -> None:
+    print(f"  {C.BGREEN}✓{C.RESET} {msg}")
+
+def warn(msg: str) -> None:
+    print(f"  {C.BYELLOW}⚠{C.RESET} {msg}")
+
+def err(msg: str) -> None:
+    print(f"  {C.BRED}✗{C.RESET} {msg}")
+
+def show(label: str, text: str, color: str = "") -> None:
+    color = color or C.YELLOW
+    print(f"\n  {color}{C.BOLD}▣ {label}{C.RESET}")
+    for ln in str(text).split("\n"):
+        print(f"    {ln}")
+# ─────────────────────────────────────────────────────────────
+
+def safe_json(text: str) -> dict:
+    """容错 JSON 解析：剥除 markdown 代码块，提取内嵌 JSON 对象"""
+    import re as _re
+    cleaned = text.strip()
+    cleaned = _re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+    cleaned = _re.sub(r"\n?```\s*$", "", cleaned).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        m = _re.search(r"(\{[\s\S]*?\}|\[[\s\S]*?\])", cleaned)
+        if m:
+            try:
+                return json.loads(m.group(1))
+            except json.JSONDecodeError:
+                pass
+        warn(f"JSON 解析失败 (前80字): {cleaned[:80]}")
+        return {}
+
+
+
 client = anthropic.Anthropic()
 
 # ============================================================
@@ -88,15 +150,8 @@ SEO_AGENT_SYSTEM = """你是一个内容优化专家。
 
 
 def pipeline_agent(topic: str) -> str:
-    """
-    流水线：研究 → 写作 → 编辑 → SEO优化
-    每个 Agent 的输出是下一个的输入
-    """
-    print(f"\n{'='*60}")
-    print(f"流水线任务：{topic}")
-    print(f"{'='*60}")
+    banner('Multi-Agent Pipeline · Research→Write→Edit→SEO', f'任务: {topic}')
 
-    # Stage 1：研究
     print("\n📚 [Stage 1: Research Agent]")
     research = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -106,7 +161,6 @@ def pipeline_agent(topic: str) -> str:
     ).content[0].text
     print(f"研究结果（前150字）：{research[:150]}...")
 
-    # Stage 2：写作（把研究结果传给 Writer）
     print("\n✍️  [Stage 2: Writer Agent]")
     article = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -119,7 +173,6 @@ def pipeline_agent(topic: str) -> str:
     ).content[0].text
     print(f"初稿（前150字）：{article[:150]}...")
 
-    # Stage 3：编辑（把文章传给 Editor）
     print("\n📝 [Stage 3: Editor Agent]")
     edited = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -129,7 +182,6 @@ def pipeline_agent(topic: str) -> str:
     ).content[0].text
     print(f"编辑后（前150字）：{edited[:150]}...")
 
-    # Stage 4：SEO优化（把编辑后的文章传给 SEO Agent）
     print("\n🚀 [Stage 4: SEO Agent]")
     final = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -229,22 +281,14 @@ WORKERS = {
 
 
 def orchestrator_agent(task: str, max_steps: int = 6) -> str:
-    """
-    Orchestrator + Workers 模式
-    Orchestrator 动态决定调用哪个 Worker 和顺序
-    """
-    print(f"\n{'='*60}")
-    print(f"Orchestrator 任务：{task}")
-    print(f"{'='*60}")
+    banner('Multi-Agent Orchestrator · 动态调度', f'任务: {task}')
 
-    # 存储所有 Worker 的执行结果
     history = []
     orchestrator_messages = [{"role": "user", "content": f"开发任务：{task}"}]
 
     for step in range(max_steps):
         print(f"\n[Step {step + 1}] Orchestrator 决策中...")
 
-        # Orchestrator 决定下一步
         orch_response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=600,
@@ -253,17 +297,12 @@ def orchestrator_agent(task: str, max_steps: int = 6) -> str:
         )
 
         orch_text = orch_response.content[0].text.strip()
-        orch_text = orch_text.replace("```json", "").replace("```", "").strip()
-
-        try:
-            decision = json.loads(orch_text)
-        except json.JSONDecodeError:
-            print(f"JSON 解析失败：{orch_text[:100]}")
+        decision = safe_json(orch_text)
+        if not decision:
             break
 
         print(f"思考：{decision.get('thinking', '')[:100]}...")
 
-        # 检查是否完成
         if decision.get("action") == "done":
             print(f"\n✅ Orchestrator 宣告完成！")
             final = decision.get("final_output", "任务完成")
@@ -271,7 +310,6 @@ def orchestrator_agent(task: str, max_steps: int = 6) -> str:
             print(f"最终总结：{final}")
             return final
 
-        # 调用指定的 Worker
         worker_name = decision.get("worker")
         instruction = decision.get("instruction", "")
 
@@ -291,7 +329,6 @@ def orchestrator_agent(task: str, max_steps: int = 6) -> str:
         worker_result = worker_response.content[0].text
         print(f"  结果（前100字）：{worker_result[:100]}...")
 
-        # 记录结果
         history.append({
             "step": step + 1,
             "worker": worker_name,
@@ -299,7 +336,6 @@ def orchestrator_agent(task: str, max_steps: int = 6) -> str:
             "result": worker_result
         })
 
-        # 把 Worker 结果反馈给 Orchestrator（追加到消息历史）
         orchestrator_messages.append({
             "role": "assistant",
             "content": orch_text
