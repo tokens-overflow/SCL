@@ -12,6 +12,49 @@ Reflection 范式完整示例
 
 import anthropic
 
+# ─── 终端彩色输出工具（VSCode Terminal 适用）────────────────────────
+class C:
+    RESET="[0m"; BOLD="[1m"; DIM="[2m"
+    RED="[31m"; GREEN="[32m"; YELLOW="[33m"
+    BLUE="[34m"; MAGENTA="[35m"; CYAN="[36m"
+    BRED="[91m"; BGREEN="[92m"; BYELLOW="[93m"
+    BBLUE="[94m"; BMAGENTA="[95m"; BCYAN="[96m"
+
+def banner(title: str, sub: str = "", width: int = 64) -> None:
+    line = "═" * width
+    print(f"\n{C.BCYAN}{C.BOLD}{line}")
+    print(f"  {title}")
+    if sub:
+        print(f"  {C.DIM}{sub}{C.BCYAN}{C.BOLD}")
+    print(f"{line}{C.RESET}")
+
+def section(title: str) -> None:
+    line = "─" * 60
+    print(f"\n{C.CYAN}{C.BOLD}{line}\n  {title}\n{line}{C.RESET}")
+
+def info(label: str, value: str = "") -> None:
+    if value:
+        print(f"  {C.BBLUE}▸{C.RESET} {C.BOLD}{label}:{C.RESET} {value}")
+    else:
+        print(f"  {C.BBLUE}▸{C.RESET} {label}")
+
+def ok(msg: str) -> None:
+    print(f"  {C.BGREEN}✓{C.RESET} {msg}")
+
+def warn(msg: str) -> None:
+    print(f"  {C.BYELLOW}⚠{C.RESET} {msg}")
+
+def err(msg: str) -> None:
+    print(f"  {C.BRED}✗{C.RESET} {msg}")
+
+def show(label: str, text: str, color: str = "") -> None:
+    color = color or C.YELLOW
+    print(f"\n  {color}{C.BOLD}▣ {label}{C.RESET}")
+    for ln in str(text).split("\n"):
+        print(f"    {ln}")
+# ─────────────────────────────────────────────────────────────
+
+
 client = anthropic.Anthropic()
 
 # ============================================================
@@ -89,12 +132,9 @@ REVISER_SYSTEM = """你是一个专业的技术文档修订专家。
 # 基础 Reflection：单模型
 # ============================================================
 def reflection_agent(task: str, max_iterations: int = 3) -> str:
-    print(f"\n{'='*60}")
-    print(f"任务：{task}")
-    print(f"{'='*60}")
+    banner('Reflection · Generator → Critic → Reviser', f'任务: {task}')
 
-    # Step 1：初始生成
-    print("\n📝 [初始生成]")
+    section("📝 初始生成")
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1500,
@@ -102,13 +142,11 @@ def reflection_agent(task: str, max_iterations: int = 3) -> str:
         messages=[{"role": "user", "content": task}]
     )
     draft = response.content[0].text
-    print(f"初始草稿（前200字）：{draft[:200]}...")
+    show('初始草稿', draft)
 
-    # Reflection 循环
     for iteration in range(max_iterations):
-        print(f"\n🔍 [Reflection 第 {iteration + 1} 轮]")
+        section(f'🔍 Reflection 第 {iteration+1} 轮')
 
-        # Step 2：Critic 审查
         critic_response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=800,
@@ -119,15 +157,13 @@ def reflection_agent(task: str, max_iterations: int = 3) -> str:
             }]
         )
         feedback = critic_response.content[0].text
-        print(f"审查意见：\n{feedback}")
+        show('审查意见', feedback)
 
-        # Step 3：检查是否通过
         if "<APPROVED/>" in feedback:
             print(f"\n✅ 第 {iteration + 1} 轮通过审查！")
             break
 
-        # Step 4：根据 feedback 改进
-        print(f"\n✏️  [根据反馈改进]")
+        section("✏️  根据反馈改进")
         revise_response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1500,
@@ -146,11 +182,9 @@ def reflection_agent(task: str, max_iterations: int = 3) -> str:
             }]
         )
         draft = revise_response.content[0].text
-        print(f"改进后（前200字）：{draft[:200]}...")
+        show('改进后内容', draft)
 
-    print(f"\n{'='*60}")
-    print("最终输出：")
-    print(draft)
+    show('最终输出', draft, C.BGREEN)
     return draft
 
 
@@ -158,15 +192,8 @@ def reflection_agent(task: str, max_iterations: int = 3) -> str:
 # 进阶：双模型 Reflection（Critic 用更强的模型）
 # ============================================================
 def dual_model_reflection(task: str, max_iterations: int = 2) -> str:
-    """
-    Generator 用 Sonnet（便宜快速）
-    Critic 用 Opus（更严格准确）
-    """
-    print(f"\n{'='*60}")
-    print(f"双模型 Reflection 任务：{task}")
-    print(f"{'='*60}")
+    banner('双模型 Reflection · Sonnet ⇔ Opus', f'任务: {task}')
 
-    # 初始生成（Sonnet）
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1500,
@@ -176,10 +203,9 @@ def dual_model_reflection(task: str, max_iterations: int = 2) -> str:
     draft = response.content[0].text
 
     for i in range(max_iterations):
-        print(f"\n🔍 [双模型 Reflection 第 {i+1} 轮]")
-        print("Critic 模型：claude-opus-4-20250514（更严格）")
+        section(f'🔍 双模型 Reflection 第 {i+1} 轮')
+        info('Critic模型', 'claude-opus-4-20250514（更严格）')
 
-        # Critic 用 Opus（更强）
         critic_response = client.messages.create(
             model="claude-opus-4-20250514",
             max_tokens=800,
@@ -192,10 +218,9 @@ def dual_model_reflection(task: str, max_iterations: int = 2) -> str:
         feedback = critic_response.content[0].text
 
         if "<APPROVED/>" in feedback:
-            print(f"✅ Opus 审查通过！")
+            ok('Opus 审查通过！')
             break
 
-        # 修订仍用 Sonnet
         revise_response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1500,
@@ -214,12 +239,6 @@ def dual_model_reflection(task: str, max_iterations: int = 2) -> str:
 # 测试
 # ============================================================
 if __name__ == "__main__":
-    # 基础版
     reflection_agent(
         "写一个 Python 装饰器的技术说明，面向有一年经验的开发者，要包含原理、语法和实际用例"
     )
-
-    # 双模型版（取消注释使用）
-    # dual_model_reflection(
-    #     "解释 Python GIL 的原理及对多线程编程的影响"
-    # )
