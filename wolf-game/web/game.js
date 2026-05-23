@@ -247,11 +247,14 @@ class Game {
     UI.refreshAll(this);
     UI.showResult(this);
     this.running = false;
-    // 游戏结束 → 清除"运行中"标记，并让 probeProxy 重新评估按钮
-    const btn = document.getElementById("btnStart");
-    if (btn) delete btn.dataset.gameRunning;
-    if (typeof window !== "undefined" && typeof window.probeProxy === "function") {
-      window.probeProxy();
+    // 游戏结束 → 仅在自己仍是"最新一局"时才解锁按钮
+    // 否则旧 run() 退出时的 cleanup 会误删新一局刚设置的锁
+    if (this.gen === GAME_GENERATION) {
+      const btn = document.getElementById("btnStart");
+      if (btn) delete btn.dataset.gameRunning;
+      if (typeof window !== "undefined" && typeof window.probeProxy === "function") {
+        window.probeProxy();
+      }
     }
   }
 
@@ -1433,7 +1436,7 @@ window.addEventListener("DOMContentLoaded", () => {
     startNewGame();
   });
   document.getElementById("btnPause").addEventListener("click", e => {
-    if (!currentGame) return;
+    if (!currentGame || !currentGame.running) return;
     currentGame.paused = !currentGame.paused;
     if (currentGame.paused) TTS.pause(); else TTS.resume();
     e.target.textContent = currentGame.paused ? "▶ 继续" : "⏸ 暂停";

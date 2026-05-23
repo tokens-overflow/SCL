@@ -128,11 +128,18 @@
   });
 
   const btnStart   = document.getElementById("btnStart");
+  const btnReset   = document.getElementById("btnReset");
   const centerStat = document.getElementById("centerStatus");
   function setStartLocked(locked, reason) {
+    // 游戏运行中：btnStart 维持禁用（开新一局没意义），但 btnReset 必须可点（用户主动重开）
     if (btnStart.dataset.gameRunning === "1") return;
     btnStart.disabled = locked;
     btnStart.title = locked ? reason : "";
+    // 未在游戏中时，重开按钮镜像同样的锁（避免绕过 LLM 未配置的检查）
+    if (btnReset) {
+      btnReset.disabled = locked;
+      btnReset.title = locked ? reason : "";
+    }
     if (centerStat) centerStat.textContent = locked ? `⚠ ${reason}` : "";
   }
 
