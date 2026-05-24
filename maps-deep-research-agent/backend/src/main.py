@@ -16,6 +16,7 @@ from loguru import logger
 
 from .agent import MapsDeepResearchAgent
 from .config import Configuration, get_configuration
+from .llm import get_active_provider_info
 from .models import (
     ResearchRequest,
     ResearchResponse,
@@ -47,12 +48,17 @@ _agent_singleton: MapsDeepResearchAgent | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     config = get_configuration()
-    logger.info(
-        "Starting Maps Deep Research Agent: model={} max_tasks={} concurrency={}",
-        config.deepseek_model,
-        config.max_tasks,
-        config.task_concurrency,
-    )
+    try:
+        provider = get_active_provider_info(config.llm_config_path)
+        logger.info(
+            "Starting Maps Deep Research Agent: provider={} model={} max_tasks={} concurrency={}",
+            provider["active"],
+            provider["model"],
+            config.max_tasks,
+            config.task_concurrency,
+        )
+    except Exception as exc:
+        logger.warning("Could not read LLMConfig.yaml at startup: {}", exc)
     yield
     # Lazy singleton may not exist if no request was served.
     global _agent_singleton
@@ -81,7 +87,15 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
-        return {"status": "ok", "model": config.deepseek_model}
+        try:
+            provider = get_active_provider_info(config.llm_config_path)
+            return {
+                "status": "ok",
+                "provider": provider["active"],
+                "model": provider["model"],
+            }
+        except Exception:
+            return {"status": "ok", "provider": "unknown", "model": "unknown"}
 
     @app.get("/usage", response_model=UsageSnapshot)
     async def usage() -> UsageSnapshot:

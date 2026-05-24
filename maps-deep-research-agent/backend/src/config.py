@@ -18,6 +18,8 @@ class Configuration(BaseSettings):
 
     Values are loaded from environment variables (uppercase field names) and
     optionally from a ``.env`` file in the backend folder.
+
+    LLM provider selection is handled by ``LLMConfig.yaml`` (see ``llm_config_path``).
     """
 
     model_config = SettingsConfigDict(
@@ -27,26 +29,11 @@ class Configuration(BaseSettings):
         extra="ignore",
     )
 
-    # ----- DeepSeek -------------------------------------------------------
-    deepseek_api_key: str = Field(default="", description="DeepSeek API key")
-    deepseek_base_url: str = Field(
-        default="https://api.deepseek.com",
-        description="DeepSeek OpenAI-compatible endpoint",
+    # ----- LLM -----------------------------------------------------------
+    llm_config_path: str = Field(
+        default="LLMConfig.yaml",
+        description="Path to LLMConfig.yaml (absolute or relative to cwd)",
     )
-    # Valid model IDs:
-    #   deepseek-v4-pro   — Pro/Reasoner model, supports thinking mode
-    #   deepseek-v4-flash — Fast/cheap model, no reasoning params
-    deepseek_model: str = Field(
-        default="deepseek-v4-pro",
-        description="DeepSeek model ID",
-    )
-    deepseek_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
-    deepseek_timeout: int = Field(default=60, ge=1)
-    # reasoning_effort: "high" | "medium" | "low" | "" (empty = disabled)
-    # Only honoured by deepseek-v4-pro; ignored for flash models.
-    deepseek_reasoning_effort: str = Field(default="high")
-    # Whether to send extra_body={"thinking": {"type": "enabled"}}
-    deepseek_thinking_enabled: bool = Field(default=True)
 
     # ----- Google Maps Platform ------------------------------------------
     google_maps_api_key: str = Field(default="", description="Server-side Google Maps API key")
@@ -82,11 +69,6 @@ class Configuration(BaseSettings):
     def cache_path(self) -> Path:
         return Path(self.cache_dir).expanduser().resolve()
 
-    @property
-    def reasoning_enabled(self) -> bool:
-        """True when the current model supports reasoning/thinking params."""
-        return bool(self.deepseek_reasoning_effort) and self.deepseek_thinking_enabled
-
     def with_overrides(self, **overrides: Any) -> "Configuration":
         """Return a *copy* with selected fields overridden (per-request)."""
         data = self.model_dump()
@@ -97,12 +79,20 @@ class Configuration(BaseSettings):
         return Configuration(**data)
 
     def assert_ready(self) -> None:
-        """Raise if mandatory credentials are missing."""
+        """Raise if mandatory credentials or config files are missing."""
         missing: list[str] = []
-        if not self.deepseek_api_key:
-            missing.append("DEEPSEEK_API_KEY")
         if not self.google_maps_api_key:
             missing.append("GOOGLE_MAPS_API_KEY")
+
+        llm_path = Path(self.llm_config_path)
+        if not llm_path.is_absolute():
+            llm_path = Path.cwd() / llm_path
+        if not llm_path.exists():
+            raise RuntimeError(
+                f"LLM config file not found: {self.llm_config_path} "
+                f"(resolved to {llm_path})"
+            )
+
         if missing:
             raise RuntimeError(
                 "Missing required environment variables: " + ", ".join(missing)
