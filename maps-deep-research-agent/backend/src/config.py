@@ -1,8 +1,4 @@
-"""Runtime configuration loaded from environment variables.
-
-Built on top of pydantic-settings so the same object can be safely shared
-across services and overridden per-request via ``Configuration.with_overrides``.
-"""
+"""Runtime configuration loaded from environment variables."""
 
 from __future__ import annotations
 
@@ -37,12 +33,20 @@ class Configuration(BaseSettings):
         default="https://api.deepseek.com",
         description="DeepSeek OpenAI-compatible endpoint",
     )
+    # Valid model IDs:
+    #   deepseek-v4-pro   — Pro/Reasoner model, supports thinking mode
+    #   deepseek-v4-flash — Fast/cheap model, no reasoning params
     deepseek_model: str = Field(
-        default="deepseek-v4-flash",
-        description="Underlying DeepSeek model id. Reference: https://api-docs.deepseek.com/zh-cn/",
+        default="deepseek-v4-pro",
+        description="DeepSeek model ID",
     )
     deepseek_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     deepseek_timeout: int = Field(default=60, ge=1)
+    # reasoning_effort: "high" | "medium" | "low" | "" (empty = disabled)
+    # Only honoured by deepseek-v4-pro; ignored for flash models.
+    deepseek_reasoning_effort: str = Field(default="high")
+    # Whether to send extra_body={"thinking": {"type": "enabled"}}
+    deepseek_thinking_enabled: bool = Field(default=True)
 
     # ----- Google Maps Platform ------------------------------------------
     google_maps_api_key: str = Field(default="", description="Server-side Google Maps API key")
@@ -70,8 +74,6 @@ class Configuration(BaseSettings):
         return ",".join(part.strip() for part in value.split(",") if part.strip())
 
     # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin for origin in self.cors_origins.split(",") if origin]
@@ -79,6 +81,11 @@ class Configuration(BaseSettings):
     @property
     def cache_path(self) -> Path:
         return Path(self.cache_dir).expanduser().resolve()
+
+    @property
+    def reasoning_enabled(self) -> bool:
+        """True when the current model supports reasoning/thinking params."""
+        return bool(self.deepseek_reasoning_effort) and self.deepseek_thinking_enabled
 
     def with_overrides(self, **overrides: Any) -> "Configuration":
         """Return a *copy* with selected fields overridden (per-request)."""

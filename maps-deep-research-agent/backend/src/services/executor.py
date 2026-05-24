@@ -19,7 +19,7 @@ import logging
 import time
 from typing import Any, Callable
 
-from ..llm.client import DeepSeekClient
+from ..llm import LLMClient
 from ..models import (
     Place,
     ResearchState,
@@ -41,7 +41,7 @@ class TaskExecutor:
     def __init__(
         self,
         registry: ToolRegistry,
-        llm: DeepSeekClient,
+        llm: LLMClient,
         concurrency: int,
     ) -> None:
         self._registry = registry

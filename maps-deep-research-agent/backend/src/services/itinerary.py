@@ -8,13 +8,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..llm.client import DeepSeekClient
+from ..llm import LLMClient
 from ..models import Place, ResearchState
 from ..prompts import itinerary_messages
 
 
 class ItineraryService:
-    def __init__(self, llm: DeepSeekClient) -> None:
+    def __init__(self, llm: LLMClient) -> None:
         self._llm = llm
 
     async def build(self, state: ResearchState) -> tuple[list[dict[str, Any]], dict[str, Any]]:

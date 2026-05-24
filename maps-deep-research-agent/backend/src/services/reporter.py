@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from ..llm.client import DeepSeekClient
+from ..llm import LLMClient
 from ..models import ResearchState
 from ..prompts import reporter_messages
 
 
 class ReporterService:
-    def __init__(self, llm: DeepSeekClient) -> None:
+    def __init__(self, llm: LLMClient) -> None:
         self._llm = llm
 
     async def generate(self, state: ResearchState) -> str:
