@@ -14,7 +14,7 @@ import time
 from typing import AsyncIterator
 
 from .config import Configuration
-from .llm import DeepSeekLLMClient, LLMUsage
+from .llm import LLMUsage, build_llm_client
 from .models import (
     BaseEvent,
     DoneEvent,
@@ -41,7 +41,7 @@ class MapsDeepResearchAgent:
         config.assert_ready()
         self._config = config
         self._usage = LLMUsage()
-        self._llm = DeepSeekLLMClient(config=config, usage=self._usage)
+        self._llm = build_llm_client(config.llm_config_path, usage=self._usage)
         self._registry, self._maps_client, self._cache = register_default_maps_tools(config)
         self._planner = PlannerService(llm=self._llm)
         self._executor = TaskExecutor(

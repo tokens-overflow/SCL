@@ -17,9 +17,12 @@ dependencies = [
     "loguru>=0.7.3",
     "tenacity>=8.5.0",
     "diskcache>=5.6.3",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
+anthropic = ["anthropic>=0.40.0"]
+bedrock = ["anthropic[bedrock]>=0.40.0"]
 dev = [
     "ruff>=0.6.0",
     "mypy>=1.11.0",
@@ -33,7 +36,7 @@ requires = ["setuptools>=73.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["src", "src.llm", "src.tools", "src.tools.maps", "src.services"]
+packages = ["src", "src.llm", "src.llm.adapters", "src.tools", "src.tools.maps", "src.services"]
 
 [tool.ruff]
 line-length = 100
