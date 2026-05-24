@@ -1,13 +1,11 @@
-"""OpenAI-compatible LLM adapter — handles both OpenAI and DeepSeek providers.
+"""OpenAI 兼容协议 adapter —— 同时支持 OpenAI 和 DeepSeek。
 
-DeepSeek uses the same OpenAI SDK with a custom base_url.  For DeepSeek pro
-models, reasoning/thinking parameters are injected automatically unless the
-provider config explicitly sets ``reasoning_effort: ""``.
+DeepSeek pro 系列模型默认自动开启 reasoning/thinking 参数；
+若需关闭，可在 LLMConfig.yaml 中显式写 ``reasoning_effort: ""``。
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Any, AsyncIterator, Iterable
 
 from openai import APIError, AsyncOpenAI, RateLimitError
@@ -21,28 +19,33 @@ from tenacity import (
 from ..base import LLMUsage
 from ._utils import safe_parse_json
 
-logger = logging.getLogger(__name__)
 
-_DEEPSEEK_DEFAULT_BASE_URL = "https://api.deepseek.com"
+def _retry() -> AsyncRetrying:
+    """统一的重试策略：3 次指数退避，仅对 429 / APIError 触发。"""
+    return AsyncRetrying(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.5, max=8),
+        retry=retry_if_exception_type((RateLimitError, APIError)),
+        reraise=True,
+    )
 
 
 class OpenAICompatAdapter:
-    """Adapter for OpenAI-compatible APIs (type: openai | deepseek)."""
+    """OpenAI 兼容协议 adapter（type: openai | deepseek）。"""
 
     def __init__(self, cfg: dict[str, Any], *, usage: LLMUsage) -> None:
         api_key: str = cfg.get("api_key", "")
         if not api_key:
             raise RuntimeError(
-                f"LLM provider '{cfg.get('type', 'openai')}': api_key is required"
+                f"LLM provider '{cfg.get('type', 'openai')}'：必须提供 api_key"
             )
 
         client_kwargs: dict[str, Any] = {
             "api_key": api_key,
             "timeout": float(cfg.get("timeout", 60)),
         }
-        base_url: str = cfg.get("base_url", "") or ""
-        if base_url:
-            client_kwargs["base_url"] = base_url
+        if cfg.get("base_url"):
+            client_kwargs["base_url"] = cfg["base_url"]
 
         self._client = AsyncOpenAI(**client_kwargs)
         self._model: str = cfg["model"]
@@ -50,7 +53,7 @@ class OpenAICompatAdapter:
         self._provider_type: str = cfg.get("type", "openai")
         self.usage = usage
 
-        # DeepSeek reasoning: enabled for pro models by default, disabled for flash
+        # DeepSeek pro 默认启用 reasoning；flash 默认关闭；yaml 可显式覆盖
         if self._provider_type == "deepseek":
             default_effort = "high" if "pro" in self._model else ""
             self._reasoning_effort: str = cfg.get("reasoning_effort", default_effort)
@@ -61,6 +64,7 @@ class OpenAICompatAdapter:
     def model(self) -> str:
         return self._model
 
+    # ------------------------------------------------------------------
     def _reasoning_kwargs(self) -> dict[str, Any]:
         if not self._reasoning_effort:
             return {}
@@ -69,13 +73,17 @@ class OpenAICompatAdapter:
             "extra_body": {"thinking": {"type": "enabled"}},
         }
 
-    async def _record_usage(self, response_usage: object) -> None:
-        if response_usage is None:
+    async def _record_usage(self, usage: object) -> None:
+        if usage is None:
             return
-        prompt = int(getattr(response_usage, "prompt_tokens", 0) or 0)
-        completion = int(getattr(response_usage, "completion_tokens", 0) or 0)
+        prompt = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion = int(getattr(usage, "completion_tokens", 0) or 0)
         await self.usage.record(prompt, completion)
 
+    def _temp(self, override: float | None) -> float:
+        return self._temperature if override is None else override
+
+    # ------------------------------------------------------------------
     async def chat(
         self,
         messages: Iterable[dict[str, str]],
@@ -83,22 +91,17 @@ class OpenAICompatAdapter:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
-        async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=0.5, max=8),
-            retry=retry_if_exception_type((RateLimitError, APIError)),
-            reraise=True,
-        ):
+        async for attempt in _retry():
             with attempt:
-                response = await self._client.chat.completions.create(
+                resp = await self._client.chat.completions.create(
                     model=self._model,
                     messages=list(messages),
-                    temperature=temperature if temperature is not None else self._temperature,
+                    temperature=self._temp(temperature),
                     max_tokens=max_tokens,
                     **self._reasoning_kwargs(),
                 )
-                await self._record_usage(response.usage)
-                return response.choices[0].message.content or ""
+                await self._record_usage(resp.usage)
+                return resp.choices[0].message.content or ""
         return ""  # pragma: no cover
 
     async def chat_json(
@@ -107,23 +110,17 @@ class OpenAICompatAdapter:
         *,
         temperature: float = 0.0,
     ) -> dict | list:
-        async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=0.5, max=8),
-            retry=retry_if_exception_type((RateLimitError, APIError)),
-            reraise=True,
-        ):
+        async for attempt in _retry():
             with attempt:
-                response = await self._client.chat.completions.create(
+                resp = await self._client.chat.completions.create(
                     model=self._model,
                     messages=list(messages),
                     temperature=temperature,
                     response_format={"type": "json_object"},
                     **self._reasoning_kwargs(),
                 )
-                await self._record_usage(response.usage)
-                raw = response.choices[0].message.content or "{}"
-                return safe_parse_json(raw)
+                await self._record_usage(resp.usage)
+                return safe_parse_json(resp.choices[0].message.content or "{}")
         return {}  # pragma: no cover
 
     async def stream_chat(
@@ -138,7 +135,7 @@ class OpenAICompatAdapter:
         stream = await self._client.chat.completions.create(
             model=self._model,
             messages=list(messages),
-            temperature=temperature if temperature is not None else self._temperature,
+            temperature=self._temp(temperature),
             stream=True,
             stream_options={"include_usage": True},
             **self._reasoning_kwargs(),
@@ -151,8 +148,7 @@ class OpenAICompatAdapter:
                     completion_tokens = int(chunk.usage.completion_tokens or 0)
                 if not chunk.choices:
                     continue
-                delta = chunk.choices[0].delta
-                content = getattr(delta, "content", None)
+                content = getattr(chunk.choices[0].delta, "content", None)
                 if content:
                     yield content
         finally:

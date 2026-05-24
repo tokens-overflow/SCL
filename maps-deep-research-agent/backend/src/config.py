@@ -1,4 +1,4 @@
-"""Runtime configuration loaded from environment variables."""
+"""运行时配置，从环境变量加载。"""
 
 from __future__ import annotations
 
@@ -14,12 +14,10 @@ Language = Literal["zh", "en"]
 
 
 class Configuration(BaseSettings):
-    """Application configuration.
+    """应用配置。
 
-    Values are loaded from environment variables (uppercase field names) and
-    optionally from a ``.env`` file in the backend folder.
-
-    LLM provider selection is handled by ``LLMConfig.yaml`` (see ``llm_config_path``).
+    从环境变量（字段名大写）加载，也可在 backend/ 下放 ``.env`` 文件。
+    LLM provider 的选择交给 ``LLMConfig.yaml`` （见 ``llm_config_path``）。
     """
 
     model_config = SettingsConfigDict(
@@ -32,7 +30,7 @@ class Configuration(BaseSettings):
     # ----- LLM -----------------------------------------------------------
     llm_config_path: str = Field(
         default="LLMConfig.yaml",
-        description="Path to LLMConfig.yaml (absolute or relative to cwd)",
+        description="LLMConfig.yaml 路径（绝对路径或相对于启动目录）",
     )
 
     # ----- Google Maps Platform ------------------------------------------
@@ -70,7 +68,7 @@ class Configuration(BaseSettings):
         return Path(self.cache_dir).expanduser().resolve()
 
     def with_overrides(self, **overrides: Any) -> "Configuration":
-        """Return a *copy* with selected fields overridden (per-request)."""
+        """返回一个覆盖了指定字段的配置副本（用于请求级覆盖）。"""
         data = self.model_dump()
         for key, value in overrides.items():
             if value is None:
@@ -79,7 +77,7 @@ class Configuration(BaseSettings):
         return Configuration(**data)
 
     def assert_ready(self) -> None:
-        """Raise if mandatory credentials or config files are missing."""
+        """缺失必要凭证或配置文件时抛出异常。"""
         missing: list[str] = []
         if not self.google_maps_api_key:
             missing.append("GOOGLE_MAPS_API_KEY")
@@ -89,17 +87,14 @@ class Configuration(BaseSettings):
             llm_path = Path.cwd() / llm_path
         if not llm_path.exists():
             raise RuntimeError(
-                f"LLM config file not found: {self.llm_config_path} "
-                f"(resolved to {llm_path})"
+                f"未找到 LLM 配置文件：{self.llm_config_path}（实际解析为 {llm_path}）"
             )
 
         if missing:
-            raise RuntimeError(
-                "Missing required environment variables: " + ", ".join(missing)
-            )
+            raise RuntimeError("缺少必要环境变量：" + ", ".join(missing))
 
 
 @lru_cache(maxsize=1)
 def get_configuration() -> Configuration:
-    """Cached singleton configuration."""
+    """单例配置。"""
     return Configuration()

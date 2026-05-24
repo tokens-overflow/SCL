@@ -1,7 +1,7 @@
 [project]
 name = "maps-deep-research-agent"
 version = "0.1.0"
-description = "Automated map-centric deep research agent powered by DeepSeek and Google Maps Platform."
+description = "Automated map-centric deep research agent with pluggable LLM providers (DeepSeek / OpenAI / Anthropic / AWS Bedrock) and Google Maps Platform."
 authors = [{ name = "songchunliang1985" }]
 readme = "../README.md"
 license = { text = "MIT" }
