@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ..llm.client import DeepSeekClient
+from ..llm import LLMClient
 from ..models import TaskNode
 from ..prompts import planner_messages
 
@@ -15,7 +15,7 @@ VALID_TOOLS = {"places", "geocoding", "directions", "distance_matrix"}
 
 
 class PlannerService:
-    def __init__(self, llm: DeepSeekClient) -> None:
+    def __init__(self, llm: LLMClient) -> None:
         self._llm = llm
 
     async def plan(

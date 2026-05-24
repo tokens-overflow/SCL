@@ -1,11 +1,11 @@
-"""Thin async client around the DeepSeek OpenAI-compatible API.
+"""DeepSeek LLM client — OpenAI-compatible API with optional thinking/reasoning.
 
-We use the official ``openai`` SDK pointed at DeepSeek's base URL. Compared to
-chapter 14 (which goes through ``hello_agents``), this gives us:
+Supports two model tiers via config:
+  - deepseek-v4-pro  : passes reasoning_effort + extra_body thinking params
+  - deepseek-v4-flash: standard completion, no reasoning params
 
-* direct access to JSON mode (``response_format``) for the planner;
-* native streaming with explicit token accounting;
-* an injectable usage tracker so the orchestrator can report per-run cost.
+Usage tracker (LLMUsage) is injectable so the orchestrator can report
+per-run token cost without coupling services to the agent layer.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Iterable
+from typing import Any, AsyncIterator, Iterable
 
 from openai import APIError, AsyncOpenAI, RateLimitError
 from tenacity import (
@@ -25,13 +25,14 @@ from tenacity import (
 )
 
 from ..config import Configuration
+from .base import LLMClient  # noqa: F401 — re-exported for convenience
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class LLMUsage:
-    """Aggregate token usage across all calls made by a client instance."""
+    """Aggregate token usage across all calls made by one client instance."""
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -52,8 +53,12 @@ class LLMUsage:
         }
 
 
-class DeepSeekClient:
-    """High-level wrapper exposing chat / JSON / streaming completions."""
+class DeepSeekLLMClient:
+    """Concrete LLM backend wired to the DeepSeek API.
+
+    Satisfies the LLMClient protocol. Passes thinking/reasoning parameters
+    automatically when the model and config support it.
+    """
 
     def __init__(self, config: Configuration, usage: LLMUsage | None = None) -> None:
         if not config.deepseek_api_key:
@@ -67,10 +72,22 @@ class DeepSeekClient:
         )
         self.usage = usage or LLMUsage()
 
-    # ------------------------------------------------------------------
     @property
     def model(self) -> str:
         return self._config.deepseek_model
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _reasoning_kwargs(self) -> dict[str, Any]:
+        """Extra kwargs for reasoning/thinking mode (pro model only)."""
+        if not self._config.reasoning_enabled:
+            return {}
+        return {
+            "reasoning_effort": self._config.deepseek_reasoning_effort,
+            "extra_body": {"thinking": {"type": "enabled"}},
+        }
 
     async def _record_usage(self, response_usage: object) -> None:
         if response_usage is None:
@@ -79,6 +96,10 @@ class DeepSeekClient:
         completion = int(getattr(response_usage, "completion_tokens", 0) or 0)
         await self.usage.record(prompt, completion)
 
+    # ------------------------------------------------------------------
+    # Public interface (satisfies LLMClient protocol)
+    # ------------------------------------------------------------------
+
     async def chat(
         self,
         messages: Iterable[dict[str, str]],
@@ -86,7 +107,7 @@ class DeepSeekClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
-        """One-shot chat completion. Returns the assistant message content."""
+        """One-shot chat completion."""
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=0.5, max=8),
@@ -101,6 +122,7 @@ class DeepSeekClient:
                     if temperature is not None
                     else self._config.deepseek_temperature,
                     max_tokens=max_tokens,
+                    **self._reasoning_kwargs(),
                 )
                 await self._record_usage(response.usage)
                 return response.choices[0].message.content or ""
@@ -112,11 +134,11 @@ class DeepSeekClient:
         *,
         temperature: float = 0.0,
     ) -> dict | list:
-        """Chat with ``response_format=json_object`` and parse the result.
+        """Chat with JSON output mode — returns parsed Python object.
 
-        DeepSeek's JSON mode requires that the prompt mention "json" - our
-        planner prompt does. If parsing fails we fall back to a best-effort
-        extraction so the whole pipeline doesn't crash on a single bad reply.
+        DeepSeek JSON mode requires the prompt to mention "json".
+        Falls back to best-effort extraction on parse failure so the
+        pipeline doesn't crash on a single bad reply.
         """
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(3),
@@ -130,6 +152,7 @@ class DeepSeekClient:
                     messages=list(messages),
                     temperature=temperature,
                     response_format={"type": "json_object"},
+                    **self._reasoning_kwargs(),
                 )
                 await self._record_usage(response.usage)
                 raw = response.choices[0].message.content or "{}"
@@ -154,6 +177,7 @@ class DeepSeekClient:
             else self._config.deepseek_temperature,
             stream=True,
             stream_options={"include_usage": True},
+            **self._reasoning_kwargs(),
         )
 
         try:
@@ -171,6 +195,11 @@ class DeepSeekClient:
             await self.usage.record(prompt_tokens, completion_tokens)
 
 
+# Backward-compat alias — existing code that imports DeepSeekClient still works.
+DeepSeekClient = DeepSeekLLMClient
+
+
+# ---------------------------------------------------------------------------
 def _safe_parse_json(raw: str) -> dict | list:
     raw = raw.strip()
     try:
@@ -178,20 +207,13 @@ def _safe_parse_json(raw: str) -> dict | list:
     except json.JSONDecodeError:
         logger.warning("LLM JSON parse failed, attempting recovery; raw=%s", raw[:200])
 
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start != -1 and end > start:
-        try:
-            return json.loads(raw[start : end + 1])
-        except json.JSONDecodeError:
-            pass
-
-    start = raw.find("[")
-    end = raw.rfind("]")
-    if start != -1 and end > start:
-        try:
-            return json.loads(raw[start : end + 1])
-        except json.JSONDecodeError:
-            pass
+    for start_char, end_char in (("{", "}"), ("[", "]")):
+        start = raw.find(start_char)
+        end = raw.rfind(end_char)
+        if start != -1 and end > start:
+            try:
+                return json.loads(raw[start : end + 1])
+            except json.JSONDecodeError:
+                continue
 
     return {}
