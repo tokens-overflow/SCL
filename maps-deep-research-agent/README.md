@@ -1,6 +1,6 @@
 # Maps Deep Research Agent
 
-一个基于 **DeepSeek + Google Maps Platform** 的自动化地图深度研究智能体。
+一个基于 **多 LLM Provider + Google Maps Platform** 的自动化地图深度研究智能体。
 
 参考《Agent Study》第十四章（HelloAgents Deep Researcher）的"规划—执行—汇报"三段式架构，在以下方面做了重新设计与增强：
 
@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 子任务模型 | 扁平 TODO 列表 | **有向无环图 (DAG)**，支持依赖关系 |
 | 检索后端 | 网页搜索 (Tavily / DuckDuckGo / Perplexity) | **Google Maps Platform**（Places / Directions / Geocoding / Distance Matrix） |
-| LLM | 任意 OpenAI 兼容 endpoint (经 HelloAgents) | 直接使用 DeepSeek 官方 SDK（含原生 JSON 模式和流式响应） |
+| LLM | 任意 OpenAI 兼容 endpoint (经 HelloAgents) | **YAML 配置多 provider**：DeepSeek / OpenAI / Anthropic / AWS Bedrock 一键切换（含原生 JSON 模式和流式响应） |
 | 工具抽象 | 内置 `note` 工具 | **可插拔 Tool 接口**，每个 Maps API = 一个 Tool |
 | SSE 事件 | 字典 + 字符串 type | **Pydantic 类型化事件模型** |
 | 缓存 | 无 | **LRU + 磁盘双层缓存**（Maps 请求等价幂等） |
@@ -29,16 +29,19 @@
 
 ```
 maps-deep-research-agent/
-├── backend/        # FastAPI + DeepSeek + Google Maps
+├── backend/        # FastAPI + 多 LLM Provider + Google Maps
 │   ├── pyproject.toml
-│   ├── .env.example
+│   ├── LLMConfig.yaml         # LLM provider 配置（active 字段切换）
 │   └── src/
 │       ├── main.py            # FastAPI 入口
 │       ├── config.py          # Pydantic Settings
 │       ├── models.py          # 状态 & 事件模型
 │       ├── prompts.py         # Planner / Summarizer / Reporter Prompt
 │       ├── agent.py           # Orchestrator
-│       ├── llm/               # DeepSeek 客户端封装
+│       ├── llm/               # LLMClient 协议 + 多 provider adapter
+│       │   ├── base.py        #   协议 + LLMUsage
+│       │   ├── loader.py      #   YAML 加载 + 工厂函数
+│       │   └── adapters/      #   OpenAI / DeepSeek / Anthropic / Bedrock
 │       ├── tools/             # 可插拔工具：Maps Places/Directions/...
 │       └── services/          # planner / executor / reporter / itinerary
 └── frontend/       # Vue 3 + TypeScript + Vite + Google Maps JS
@@ -54,20 +57,32 @@ maps-deep-research-agent/
 
 ### 1. 准备 API Key
 
-- **DeepSeek**: https://platform.deepseek.com
+- **DeepSeek**: https://platform.deepseek.com （或 OpenAI / Anthropic / AWS Bedrock 任选其一）
 - **Google Maps Platform**: https://console.cloud.google.com  
   需要启用：Places API (New)、Directions API、Geocoding API、Distance Matrix API、Maps JavaScript API。
 
-### 2. 启动后端
+### 2. 配置 LLM Provider
+
+编辑 `backend/LLMConfig.yaml`，把 `active` 改为想用的 provider 别名（如 `ds-flash` / `ds-pro` / `openai` / `anthropic` / `bedrock`）。YAML 中 `${VAR}` 占位符会在启动时从环境变量展开。
+
+### 3. 启动后端
 
 ```bash
 cd backend
-cp .env.example .env   # 填入 DEEPSEEK_API_KEY / GOOGLE_MAPS_API_KEY
-pip install -e .       # 或 uv sync
-python -m src.main     # http://localhost:8000
+export DEEPSEEK_API_KEY=sk-...        # 按 LLMConfig.yaml 中 active 项填对应 key
+export GOOGLE_MAPS_API_KEY=AIzaSy...
+pip install -e .                      # 或 uv sync
+python -m src.main                    # http://localhost:8000
 ```
 
-### 3. 启动前端
+如需 Anthropic / Bedrock，额外安装：
+
+```bash
+pip install -e ".[anthropic]"   # type: anthropic
+pip install -e ".[bedrock]"     # type: bedrock
+```
+
+### 4. 启动前端
 
 ```bash
 cd frontend
