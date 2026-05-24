@@ -641,27 +641,28 @@ class Agent {
   }
 
   _ruleDecideRunForSheriff(game) {
-    // 规则版兜底:对齐 prompt 中的角色铁律,默认压低非神位上警概率
-    if (this.role === "seer") return true;                          // 预言家必上
+    // 规则版兜底（仅 LLM 失败时走）:中性化,让平民/神职也有合理上警概率,贴近真实场上 3-6 人上警
+    if (this.role === "seer") return true;                          // 预言家铁律必上
     if (this.role === "wolf") {
-      // 狼按战术分工(对齐 role_wolf.md):悍跳必上、倒钩可上、冲锋少上、深水不上
+      // 狼按战术分工(机制铁律,与 role_wolf.md 对齐):悍跳必上 / 倒钩可上 / 冲锋少上 / 深水不上
       let p = 0;
       switch (this.wolfTactic) {
-        case "悍跳狼": p = 1.0; break;                              // 铁律必上
-        case "倒钩狼": p = 0.60 * this.personality.deception; break; // 站好人立场更可信
-        case "冲锋狼": p = 0.20; break;                             // 偶尔顶身位
-        case "深水狼": p = 0; break;                                // 铁律不上
-        default:       p = 0.30 * this.personality.deception;       // 兜底
+        case "悍跳狼": p = 1.0; break;
+        case "倒钩狼": p = 0.60 * this.personality.deception; break;
+        case "冲锋狼": p = 0.20; break;
+        case "深水狼": p = 0; break;
+        default:       p = 0.30 * this.personality.deception;
       }
       const willRun = Math.random() < p;
       this._intendsToRunSheriff = willRun;
       return willRun;
     }
-    if (this.role === "witch")   return Math.random() < 0.05;       // 女巫几乎永不上,避免暴露神职
-    if (this.role === "guard")   return Math.random() < 0.08;       // 守卫同理
-    if (this.role === "hunter")  return Math.random() < 0.20;       // 猎人偶尔上(威慑)
-    // 村民:仅性格极活跃才上(talkative≥0.85 → 约 13%);其余约 5%
-    return Math.random() < 0.10 * Math.max(0, this.personality.talkative - 0.4);
+    // 神职/平民:基线 + 性格(talkative)加成,让兜底场景下也能产生 3-6 人上警分布
+    if (this.role === "witch")   return Math.random() < (0.15 + 0.20 * this.personality.talkative);  // ~15-35%
+    if (this.role === "guard")   return Math.random() < (0.15 + 0.20 * this.personality.talkative);
+    if (this.role === "hunter")  return Math.random() < (0.25 + 0.25 * this.personality.talkative);  // ~25-50%
+    // 村民:基线 20% + 性格加成,满分性格 ~50%
+    return Math.random() < (0.20 + 0.30 * this.personality.talkative);
   }
 
   // 警长当选后宣布警徽流方向，返回 +1（顺时针/座位号递增）或 -1（逆时针）

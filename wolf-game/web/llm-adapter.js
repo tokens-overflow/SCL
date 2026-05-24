@@ -475,21 +475,18 @@
     } else if (kind === "run-sheriff") {
       const totalAlive = (context.players || []).filter(p => p.alive).length;
       lines.push(`【警长竞选 · 是否上警】场上活人 ${totalAlive}。`);
-      lines.push(`⚠ 高曝光决策:上警=主动暴露自己。绝大多数角色应该默认 run=false。`);
+      lines.push(`12 人神局典型上警 3-6 人。请结合你的角色 SOP（系统 prompt 已注入）和当前局面自行判断。`);
       if (context.me.role === "wolf" && context.me.wolfTactic) {
-        lines.push(`★ 你是狼且战术分工=【${context.me.wolfTactic}】,按分工铁律决定:`);
-        lines.push(`  · 悍跳狼: **必须 run=true**(冲身位铁律,要上警跳预言家,把好人目光吸到自己身上)。`);
-        lines.push(`  · 冲锋狼: 通常 run=false(打头阵靠白天激进发言,不靠警长身位);除非悍跳狼缺位才考虑顶上。`);
-        lines.push(`  · 倒钩狼: 可以 run=true(站好人立场更可信),但**绝不**跳预言家。`);
-        lines.push(`  · 深水狼: **绝对 run=false**(藏身位,不暴露)。`);
-      } else {
-        lines.push(`按角色铁律:`);
-        lines.push(`  · 预言家:必须 run=true(铁律,核心信息源)。`);
-        lines.push(`  · 女巫 / 守卫:**几乎永不上警**(暴露神职,首夜就被狼刀)。`);
-        lines.push(`  · 猎人:**默认不上**;只在性格强势想威慑狼时偶尔上。`);
-        lines.push(`  · 村民:**绝对默认 run=false**。村民上警没信息只会被狼盯。`);
+        // 狼队战术分工属于机制铁律（开局洗牌固定分配），不是上警偏好，必须保留
+        lines.push(`★ 你是狼，战术分工=【${context.me.wolfTactic}】，按分工铁律执行：`);
+        lines.push(`  · 悍跳狼：**必须 run=true**（冲身位铁律，上警跳预言家把火吸到自己身上）。`);
+        lines.push(`  · 冲锋狼：通常不上（靠白天激进发言带节奏），但悍跳狼缺位时可顶上。`);
+        lines.push(`  · 倒钩狼：可上（站好人立场更可信），但**绝不**跳预言家。`);
+        lines.push(`  · 深水狼：**绝对 run=false**（藏身位铁律）。`);
+      } else if (context.me.role === "seer") {
+        lines.push(`★ 你是预言家：**铁律必上**（核心信息源，不上等于把警徽白送）。`);
       }
-      lines.push(`先想清楚:你是谁?上去能提供什么信息?如果不能,不上。`);
+      lines.push(`决策时综合考虑：你的身份能提供什么信息？场上几人已表态上警？此时上是放大优势还是暴露神职？`);
     } else if (kind === "self-explode") {
       lines.push(`提示：场上危急（队友被查杀/自己被查杀/真预言家明牌）时考虑自爆。`);
     } else if (kind === "pass-badge") {
