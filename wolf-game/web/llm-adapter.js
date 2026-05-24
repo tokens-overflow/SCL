@@ -223,8 +223,9 @@
       ? `你已跳身份 = ${ROLE_CN[context.me.publicRole] || context.me.publicRole}（不要重复介绍自己）`
       : "你尚未跳身份（**不要主动暴露身份**，除非战术需要）";
 
-    // V2.8：私有思考日记（让 agent 跨轮策略一致）
-    const myThinking = (context.me.thinkingLog || []).slice(-5);
+    // 私有思考日记（让 agent 跨轮策略一致）
+    // 上游 _selectKeyThinkings 已按天精选最近 4 天关键决策，这里直接消费、不再二次截断
+    const myThinking = (context.me.thinkingLog || []);
     const thinkingBlock = myThinking.length
       ? "你的内心日记（私人，仅你可见，帮你跨轮策略一致）：\n" +
         myThinking.map(t => `  · 第${t.day}天[${kindLabel[t.kind] || t.kind}]："${t.thinking}"`).join("\n")
@@ -362,8 +363,8 @@
 
     const myInfo = buildHiddenInfo(context);
 
-    // V2.8：私有思考日记
-    const myThinking = (context.me.thinkingLog || []).slice(-5);
+    // V2.8：私有思考日记。V3：上游 _selectKeyThinkings 已按天精选最近 4 天关键决策，这里不再二次截断
+    const myThinking = (context.me.thinkingLog || []);
     const kindLabel = { "day": "白天", "sheriff": "上警", "pk": "PK", "last-words": "遗言",
                         "vote": "白天投票", "wolf-kill": "夜刀", "seer-check": "夜验",
                         "witch-save": "女巫救", "witch-poison": "女巫毒", "guard-protect": "守人" };
@@ -395,7 +396,8 @@
         "\n=== 复盘结束 ==="
       : "";
 
-    const memoryBlock = buildMemoryBlock(context.me.recentMemory);
+    // 修复：字段名是 recentMemoryDigests，旧代码写成 recentMemory 导致 decide 路径记忆块永远为空
+    const memoryBlock = buildMemoryBlock(context.me.recentMemoryDigests);
 
     // 三层记忆 · 私有层(facts + beliefs)
     const privateMemBlock = renderPrivateMemoryBlock(context.me);

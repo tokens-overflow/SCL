@@ -3,6 +3,13 @@
    每个 agent 拥有：性格、角色、记忆、目标推断、发言生成器
    ============================================================= */
 
+// ── 注入 prompt 的记忆 / 发言历史窗口（与 web/memory.js 的 RECENT_DAYS / DIGEST_MAX_CHARS 保持语义一致）──
+const RECENT_SPEECH_DAYS = 3;   // _publicContext 注入最近 N 天的全部发言
+const SPEECH_TEXT_MAX    = 120; // 单条发言截断字数，防 token 膨胀
+const KEY_THINKING_DAYS  = 4;   // _selectKeyThinkings 注入最近 N 天的关键决策
+const KEY_THINKING_PER_DAY = 3; // 每天最多保留 N 条关键决策
+const THINKING_TEXT_MAX  = 200; // 单条 thinking 截断字数
+
 // LLM 钩子：llm-adapter.js 会把 { enabled, speak, decide, summarize } 挂到 window.LLM_HOOK。
 // 任一调用失败/返回空，自动回退到本文件下方的规则版策略。
 const LLM = {
@@ -348,14 +355,6 @@ class Agent {
       }
     }
     return actions.length ? actions : null;
-  }
-
-  _isProbablyGod(idx, game) {
-    const c = game.agents[idx].publicRole;
-    if (c === "seer") return true;
-    if (c === "witch" || c === "guard" || c === "hunter") return true;
-    // 没跳身份但发言激进 也可能是神
-    return false;
   }
 
   async _guardProtect(game) {
@@ -896,12 +895,14 @@ function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 // 让 LLM 决策时可用的轻量上下文快照（不含任何 UI / DOM 引用）
 Agent.prototype._publicContext = function (game) {
-  // 发言历史：当天所有 + 昨天遗言（让 LLM 能基于他人发言回应）
+  // 发言历史：最近 RECENT_SPEECH_DAYS 天全部发言（含今天），让 LLM 跨天回应、跨天对账
+  const minDay = Math.max(1, game.day - (RECENT_SPEECH_DAYS - 1));
   const recentSpeeches = (game.speechHistory || [])
-    .filter(s => s.day === game.day || (s.day === game.day - 1 && s.kind === "last-words"))
+    .filter(s => s.day >= minDay && s.day <= game.day)
     .map(s => ({
       day: s.day, no: s.agentNo, publicRole: s.publicRole,
-      kind: s.kind, text: s.text,
+      kind: s.kind,
+      text: (s.text || "").slice(0, SPEECH_TEXT_MAX),
     }));
 
   // 三层记忆:从 PrivateMemory / PublicLog 抽取要喂给 LLM 的视图
@@ -927,8 +928,9 @@ Agent.prototype._publicContext = function (game) {
         : null,
       seerChecks: this.seerChecks.map(c => ({ no: game.agents[c.target].no, isWolf: c.isWolf, day: c.day })),
       witchHasSave: this.witchHasSave, witchHasPoison: this.witchHasPoison,
-      // V2.8：私有思考日记（最近 5 条），让 LLM 跨轮保持策略一致
-      thinkingLog: this.thinkingLog.slice(-5),
+      // 私有思考日记 —— 按天分组取最近 KEY_THINKING_DAYS 天关键决策（每天最多 KEY_THINKING_PER_DAY 条）
+      // 关键决策的定义和过滤逻辑见 _selectKeyThinkings()
+      thinkingLog: this._selectKeyThinkings(game.day),
       // 压缩记忆：最近 3 天的 ≤80 字摘要，喂给 prompt（避免上下文爆掉）
       // 原始 memoryByDay 仍存活在本对象上、写盘到 memory/agent-N.md，供人工 review 或工具按需读取
       // 取最近 N 天的策略和数据结构由 web/memory.js 维护
@@ -965,4 +967,32 @@ Agent.prototype._publicContext = function (game) {
     // 全条目快照,供 prompt 渲染时按需切片;条目本身 frozen,不可篡改
     publicLogView: game.publicLog ? game.publicLog.snapshot() : [],
   };
+};
+
+// 按天分组取最近 KEY_THINKING_DAYS 天的关键决策日记，让 agent 能跨天回忆"我以前怎么想/怎么投的"
+//   关键决策 = 公共阶段决策（day/vote/sheriff/last-words/pk）+ 神职关键 night 决策（seer/witch/guard）
+//   每天最多 KEY_THINKING_PER_DAY 条；一日内越靠后越重要（白天发言→投票→遗言）
+Agent.prototype._KEY_THINKING_KINDS = new Set([
+  "day", "vote", "pk", "pk-vote", "sheriff-vote", "run-sheriff", "last-words",
+  "seer-check", "witch-poison", "witch-save", "guard-protect", "wolf-kill",
+]);
+Agent.prototype._selectKeyThinkings = function (currentDay) {
+  const minDay = Math.max(1, currentDay - KEY_THINKING_DAYS + 1);
+  const byDay = new Map();
+  for (const t of (this.thinkingLog || [])) {
+    if (t.day < minDay || t.day > currentDay) continue;
+    if (!this._KEY_THINKING_KINDS.has(t.kind)) continue;
+    if (!byDay.has(t.day)) byDay.set(t.day, []);
+    byDay.get(t.day).push(t);
+  }
+  const out = [];
+  for (const d of [...byDay.keys()].sort((a, b) => a - b)) {
+    for (const t of byDay.get(d).slice(-KEY_THINKING_PER_DAY)) {
+      out.push({
+        day: t.day, kind: t.kind,
+        thinking: (t.thinking || "").slice(0, THINKING_TEXT_MAX),
+      });
+    }
+  }
+  return out;
 };

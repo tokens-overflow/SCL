@@ -10,8 +10,8 @@
     },
     "deepseek": {
       "apiKey": "sk-FILL_YOUR_DEEPSEEK_KEY",
-      "baseURL": "https://api.deepseek.com/v1",
-      "model": "deepseek-chat"
+      "baseURL": "https://api.deepseek.com",
+      "model": "deepseek-v4-pro"
     },
     "openai": {
       "apiKey": "sk-FILL_YOUR_OPENAI_KEY",

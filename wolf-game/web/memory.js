@@ -80,9 +80,10 @@ const Memory = (function () {
     const prevLine = prevDigest
       ? `\n\n你昨日的记忆（用于保持人设一致，不要原样复述）：${prevDigest}`
       : "";
+    // V3：digest 必须信息密度更高 —— agent 跨天回忆只能靠这 80 字，必须含决定 + 站边
     return {
-      system: `你正在扮演 ${agent.no} 号 ${agent.name}（${ROLE_CN[agent.role] || agent.role} · ${agent.personality.name}）。请用第一人称写一段 ≤80 字的【本日个人记忆摘要】，作为你明天打牌的依据。要点：今日最关键判断、谁可信、谁可疑、明天计划。不暴露上帝视角，不分点不换行。`,
-      user: `第 ${day} 天\n\n他人发言：\n${othersText}\n\n我的思考动作：\n${myText}${prevLine}\n\n请输出 ≤80 字的本日记忆摘要：`,
+      system: `你正在扮演 ${agent.no} 号 ${agent.name}（${ROLE_CN[agent.role] || agent.role} · ${agent.personality.name}）。请用第一人称写一段 ≤80 字的【本日个人记忆摘要】，作为你明天打牌的依据。\n\n**必含 4 要素**（缺一不可，按顺序）：\n① 我今天的关键决定（投了谁/守了谁/查了谁/跳没跳，连同核心理由）；\n② 我对场上局势的判断（哪个跳神位真、哪条逻辑链可信）；\n③ 1-2 个最可信玩家 + 1-2 个最可疑玩家（用号码，简述原因）；\n④ 明天的具体计划（盯谁、问什么、跟哪条线）。\n\n禁忌：不暴露上帝视角、不分点不换行、不空话（"再观察"/"等信息"无效）。≤80 字一段话。`,
+      user: `第 ${day} 天\n\n他人发言：\n${othersText}\n\n我的思考动作：\n${myText}${prevLine}\n\n请输出 ≤80 字的本日记忆摘要（必须覆盖决定+判断+信任/怀疑+明天计划 4 要素）：`,
     };
   }
 
@@ -156,7 +157,7 @@ const Memory = (function () {
   // ── 纯函数：渲染为 prompt 段，给 llm-adapter 用 ──
   function renderPromptBlock(recentMemoryDigests) {
     if (!recentMemoryDigests || recentMemoryDigests.length === 0) return "";
-    const lines = ["=== 你的个人记忆（最近 3 天压缩摘要，你视角）==="];
+    const lines = [`=== 你的个人记忆（最近 ${RECENT_DAYS} 天压缩摘要，你视角）===`];
     recentMemoryDigests.forEach(entry => {
       if (entry.digest) lines.push(`【第${entry.day}天】${entry.digest}`);
     });

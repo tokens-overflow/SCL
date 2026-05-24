@@ -425,65 +425,72 @@ class Game {
     UI.log("day", `☀️ 第 ${this.day} 天 · 白天来临`);
     await this.wait();
 
-    // 公布死讯
-    const nightDeaths = this.history.filter(h => h.day === this.day && h.cause === "night");
-    if (nightDeaths.length === 0) {
-      UI.log("day", `平安夜：昨晚没有人死亡。`);
-      UI.setPhase("day", this.day, "平安夜");
-    } else {
-      const names = nightDeaths.map(d => `${this.agents[d.idx].no}号`).join("、");
-      UI.log("death", `昨晚 <span class="who">${names}</span> 死亡。`);
-      UI.setPhase("day", this.day, `${names} 死亡`);
-      // 遗言
-      for (const d of nightDeaths) {
-        await this.lastWords(d.idx);
-      }
-      // 猎人开枪
-      for (const d of nightDeaths) {
-        const a = this.agents[d.idx];
-        if (a.role === "hunter" && d.cause === "night" && this.tonightPoison !== d.idx) {
-          await this.hunterShoot(d.idx);
+    // 用 try/finally 保证无论从哪条 return 路径退出，都会写入当日记忆
+    // 修复：先前自爆/胜利 return 会跳过 flushAll，导致 memory/agent-N.md 缺天
+    try {
+      // 公布死讯
+      const nightDeaths = this.history.filter(h => h.day === this.day && h.cause === "night");
+      if (nightDeaths.length === 0) {
+        UI.log("day", `平安夜：昨晚没有人死亡。`);
+        UI.setPhase("day", this.day, "平安夜");
+      } else {
+        const names = nightDeaths.map(d => `${this.agents[d.idx].no}号`).join("、");
+        UI.log("death", `昨晚 <span class="who">${names}</span> 死亡。`);
+        UI.setPhase("day", this.day, `${names} 死亡`);
+        // 遗言
+        for (const d of nightDeaths) {
+          await this.lastWords(d.idx);
+        }
+        // 猎人开枪
+        for (const d of nightDeaths) {
+          const a = this.agents[d.idx];
+          if (a.role === "hunter" && d.cause === "night" && this.tonightPoison !== d.idx) {
+            await this.hunterShoot(d.idx);
+          }
         }
       }
-    }
-    if (this.checkWin()) return;
-    await this.wait();
-
-    // 警长竞选（仅第一天）
-    if (this.day === 1 && !this.sheriffElectionDone) {
-      this.sheriffElectionDone = true;
-      await this.sheriffElection();
       if (this.checkWin()) return;
       await this.wait();
-    }
 
-    // 发言阶段
-    UI.setPhase("day", this.day, "依次发言…");
-    const alive = this.aliveAgents();
-    const startIdx = (this.day - 1) % alive.length;
-    const order = alive.slice(startIdx).concat(alive.slice(0, startIdx));
-    let interrupted = false;
-    for (const a of order) {
-      if (!a.alive) continue;
-      const r = await this.speak(a);
-      if (r === "self-explode") { interrupted = true; break; }
-    }
-    if (this.checkWin()) return;
-    // 狼人自爆 → 跳过当日投票
-    if (interrupted) {
-      UI.log("day", `💥 狼人自爆，本日投票取消，直接进入夜晚`);
-      return;
-    }
+      // 警长竞选（仅第一天）
+      if (this.day === 1 && !this.sheriffElectionDone) {
+        this.sheriffElectionDone = true;
+        await this.sheriffElection();
+        if (this.checkWin()) return;
+        await this.wait();
+      }
 
-    // 投票
-    await this.votePhase();
-    if (this.checkWin()) return;
+      // 发言阶段
+      UI.setPhase("day", this.day, "依次发言…");
+      const alive = this.aliveAgents();
+      const startIdx = (this.day - 1) % alive.length;
+      const order = alive.slice(startIdx).concat(alive.slice(0, startIdx));
+      let interrupted = false;
+      for (const a of order) {
+        if (!a.alive) continue;
+        const r = await this.speak(a);
+        if (r === "self-explode") { interrupted = true; break; }
+      }
+      if (this.checkWin()) return;
+      // 狼人自爆 → 跳过当日投票
+      if (interrupted) {
+        UI.log("day", `💥 狼人自爆，本日投票取消，直接进入夜晚`);
+        return;
+      }
 
-    // V2.9-2：本日结束，生成复盘总结让明天 agent 学习
-    await this._buildRoundSummary();
-    // 本日结束，给每个存活 agent 各自生成压缩摘要 + 落 memory.md
-    // 逻辑已抽离到 web/memory.js（Memory.flushAll），见该文件顶部注释
-    await Memory.flushAll(this.agents, this.day, this.speechHistory, this.history);
+      // 投票
+      await this.votePhase();
+      if (this.checkWin()) return;
+    } finally {
+      // V2.9-2：本日结束，生成复盘总结让明天 agent 学习
+      // V3：移入 finally，保证自爆/胜利等所有路径都会写入记忆
+      try {
+        await this._buildRoundSummary();
+        await Memory.flushAll(this.agents, this.day, this.speechHistory, this.history);
+      } catch (e) {
+        console.warn(`[dayPhase] flush day ${this.day} memory failed:`, e?.message || e);
+      }
+    }
   }
 
   /* V2.9-2 ============ 每轮复盘（事实 + LLM 推断）============ */

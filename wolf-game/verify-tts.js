@@ -15,7 +15,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "web/tts.js"), "utf-8"), sa
 vm.runInContext("globalThis.TTS = TTS;", sandbox);
 
 const TTS = sandbox.TTS;
-const { GENDERS, VOICE_PATTERNS, PITCH_PARAMS, genderOrder, computeParams } = TTS._internals;
+const { GENDERS, VOICE_PATTERNS, PITCH_PARAMS, genderOrder, computeParams, assignVoices } = TTS._internals;
 
 function assert(cond, msg) {
   if (!cond) { console.error("❌ FAIL:", msg); process.exit(1); }
@@ -76,6 +76,31 @@ const p11 = computeParams({ idx: 11, personality: { aggro: 0.75, talkative: 0.95
 assert(approx(p11.pitch, 0.81, 0.011), `idx=11 pitch=${p11.pitch} want ~0.81`);
 assert(approx(p11.rate, 1.28, 0.011), `idx=11 rate=${p11.rate} want ~1.28`);
 console.log("✅ Test 3: computeParams 公式与抽离前完全等价");
+
+// ── Test 3.5: assignVoices 1:1 不重复 ──
+// 用 mock voice 对象（任何 truthy 值都行）
+const mockF = ["F1","F2","F3","F4","F5","F6","F7","F8"]; // 8 个女声
+const mockM = ["M1","M2","M3","M4","M5","M6"];           // 6 个男声
+const mockAny = [...mockF, ...mockM];
+const a1 = assignVoices(mockF, mockM, mockAny);
+assert(a1.length === 12, "assignment length=12");
+assert(a1.every(v => v !== null), "all 12 slots filled when pool sufficient");
+assert(new Set(a1).size === 12, "all 12 voices unique when pool sufficient");
+// 性别匹配：每个 F idx 的 voice 应来自 mockF
+GENDERS.forEach((g, idx) => {
+  if (g === "F") assert(mockF.includes(a1[idx]), `idx=${idx} (F) got ${a1[idx]} not from F pool`);
+  if (g === "M") assert(mockM.includes(a1[idx]), `idx=${idx} (M) got ${a1[idx]} not from M pool`);
+});
+console.log("✅ Test 3.5a: 池子充足时，12 人 1:1 不重复且性别匹配");
+
+// 不足场景：F 只有 3 个 voice，但有 7 个 F 角色 → 4 个 F 角色借用 M 池剩余
+const mockF2 = ["F1","F2","F3"];
+const mockM2 = ["M1","M2","M3","M4","M5","M6","M7","M8","M9","M10"]; // 充足借用
+const mockAny2 = [...mockF2, ...mockM2];
+const a2 = assignVoices(mockF2, mockM2, mockAny2);
+assert(a2.length === 12 && a2.every(v => v !== null), "all 12 filled in shortage case");
+assert(new Set(a2).size === 12, "still 12 unique by borrowing from other gender");
+console.log("✅ Test 3.5b: F 池不足时，借用 M 池剩余仍保持 12 个不重复");
 
 // ── Test 4: TTS 单例接口完整 ──
 assert(typeof TTS.init === "function", "TTS.init exists");
