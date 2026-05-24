@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from ..llm import LLMClient
-from ..models import TaskNode
+from ..models import Language, TaskNode
 from ..prompts import planner_messages
 
 logger = logging.getLogger(__name__)
@@ -22,13 +22,13 @@ class PlannerService:
         self,
         topic: str,
         *,
-        language: str,
+        language: Language,
         max_tasks: int,
         location_hint: str | None,
     ) -> list[TaskNode]:
         messages = planner_messages(
             topic=topic,
-            language=language,  # type: ignore[arg-type]
+            language=language,
             max_tasks=max_tasks,
             location_hint=location_hint,
         )

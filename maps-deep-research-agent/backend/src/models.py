@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 
 TaskStatus = Literal["pending", "in_progress", "completed", "skipped", "failed"]
+Language = Literal["zh", "en"]
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +81,7 @@ class TaskNode(BaseModel):
 class ResearchState(BaseModel):
     run_id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     topic: str
-    language: Literal["zh", "en"] = "zh"
+    language: Language = "zh"
     started_at: float = Field(default_factory=time.time)
     finished_at: float | None = None
     tasks: list[TaskNode] = Field(default_factory=list)

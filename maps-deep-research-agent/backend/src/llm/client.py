@@ -46,6 +46,7 @@ class LLMUsage:
             self.request_count += 1
 
     def snapshot(self) -> dict[str, int]:
+        # Read under Python's GIL — integer reads are atomic, no async lock needed.
         return {
             "llm_prompt_tokens": self.prompt_tokens,
             "llm_completion_tokens": self.completion_tokens,

@@ -20,6 +20,7 @@ from .models import (
     DoneEvent,
     ErrorEvent,
     Event,
+    Language,
     PlanReadyEvent,
     ReportEvent,
     ResearchState,
@@ -62,6 +63,12 @@ class MapsDeepResearchAgent:
             cache_hits=self._cache.hits,
         )
 
+    def _resolve_language(self, language: str | None) -> Language:
+        """Validate and narrow a raw language string to the Language literal."""
+        if language in ("zh", "en"):
+            return language  # type: ignore[return-value]
+        return self._config.default_language
+
     async def aclose(self) -> None:
         await self._maps_client.aclose()
 
@@ -77,7 +84,7 @@ class MapsDeepResearchAgent:
         """Synchronous end-to-end run; returns the final state."""
         state = ResearchState(
             topic=topic,
-            language=language or self._config.default_language,  # type: ignore[arg-type]
+            language=self._resolve_language(language),
         )
         state.tasks = await self._planner.plan(
             topic=topic,
@@ -108,7 +115,7 @@ class MapsDeepResearchAgent:
         """Stream typed events while the workflow executes."""
         state = ResearchState(
             topic=topic,
-            language=language or self._config.default_language,  # type: ignore[arg-type]
+            language=self._resolve_language(language),
         )
 
         queue: asyncio.Queue[Event | None] = asyncio.Queue()

@@ -44,7 +44,7 @@ class ReporterService:
         messages = reporter_messages(
             topic=state.topic,
             blocks="\n".join(blocks),
-            language=state.language,  # type: ignore[arg-type]
+            language=state.language,
         )
         report = await self._llm.chat(messages, temperature=0.3)
         return report.strip()

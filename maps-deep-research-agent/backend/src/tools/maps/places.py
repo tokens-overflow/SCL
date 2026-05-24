@@ -23,13 +23,19 @@ def _normalise_place(raw: dict[str, Any]) -> Place | None:
     name = (raw.get("displayName") or {}).get("text") or raw.get("displayName") or ""
     opening = (raw.get("regularOpeningHours") or {}).get("weekdayDescriptions") or []
     photos = raw.get("photos") or []
-    photo_ref = photos[0].get("name") if photos else None
+    first_photo = photos[0] if photos else None
+    photo_ref = first_photo.get("name") if isinstance(first_photo, dict) else None
+    try:
+        lat = float(location.get("latitude", location.get("lat", 0.0)))
+        lng = float(location.get("longitude", location.get("lng", 0.0)))
+    except (TypeError, ValueError):
+        return None
     return Place(
         place_id=raw.get("id") or raw.get("place_id") or "",
         name=name or "未命名地点",
         address=raw.get("formattedAddress") or raw.get("formatted_address") or "",
-        lat=float(location.get("latitude", location.get("lat", 0.0))),
-        lng=float(location.get("longitude", location.get("lng", 0.0))),
+        lat=lat,
+        lng=lng,
         rating=raw.get("rating"),
         user_ratings_total=raw.get("userRatingCount"),
         price_level=_price_level(raw.get("priceLevel")),
@@ -71,8 +77,12 @@ class PlacesTool(Tool):
         query = (args.get("query") or "").strip()
         language = args.get("language") or self._config.default_language
         language_code = "zh-CN" if language == "zh" else "en"
-        radius = int(args.get("radius") or self._config.google_maps_default_radius)
-        limit = int(args.get("limit") or self._config.google_maps_places_limit)
+        try:
+            radius = int(args.get("radius") or self._config.google_maps_default_radius)
+            limit = int(args.get("limit") or self._config.google_maps_places_limit)
+        except (TypeError, ValueError):
+            radius = self._config.google_maps_default_radius
+            limit = self._config.google_maps_places_limit
         open_now = args.get("open_now")
 
         start = time.perf_counter()

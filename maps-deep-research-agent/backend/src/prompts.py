@@ -9,10 +9,8 @@ Two improvements over chapter 14:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
 
-
-Language = Literal["zh", "en"]
+from .models import Language
 
 
 def now_iso() -> str:

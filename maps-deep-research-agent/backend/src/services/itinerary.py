@@ -6,11 +6,14 @@ parallel after all tasks finish.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ..llm import LLMClient
 from ..models import Place, ResearchState
 from ..prompts import itinerary_messages
+
+logger = logging.getLogger(__name__)
 
 
 class ItineraryService:
@@ -27,11 +30,12 @@ class ItineraryService:
                 itinerary_messages(
                     topic=state.topic,
                     evidence_block=evidence_block,
-                    language=state.language,  # type: ignore[arg-type]
+                    language=state.language,
                 ),
                 temperature=0.4,
             )
         except Exception:
+            logger.exception("Itinerary LLM call failed, returning empty itinerary")
             raw = []
 
         days = _extract_days(raw)

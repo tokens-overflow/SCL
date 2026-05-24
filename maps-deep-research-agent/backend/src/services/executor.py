@@ -182,7 +182,7 @@ class TaskExecutor:
             task_title=node.title,
             task_intent=node.intent,
             evidence_block=evidence_block,
-            language=state.language,  # type: ignore[arg-type]
+            language=state.language,
         )
         chunks: list[str] = []
         try:
