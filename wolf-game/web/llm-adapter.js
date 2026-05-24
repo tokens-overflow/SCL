@@ -496,6 +496,11 @@
       const cands = (options.candidates || []).map(no => `${no}号`).join("、");
       lines.push(`可传警徽的活人：${cands}`);
       lines.push(`提示：好人传给最信任的活人（金水/真预言家）；狼人传给队友或撕毁；-1 撕毁。`);
+    } else if (kind === "sheriff-direction") {
+      lines.push(`【警徽流方向】你刚当选警长，需要宣布今天白天发言顺序。`);
+      lines.push(`  · direction=+1 顺时针：从你下家（${context.me.no}号的下一位活人）起手，你最后发言`);
+      lines.push(`  · direction=-1 逆时针：从你上家（${context.me.no}号的上一位活人）起手，你最后发言`);
+      lines.push(`提示：好人警长把高怀疑度方向放前面（让可疑玩家先暴露逻辑），低怀疑度方向放后面（让金水/真神职最后总结）；狼人警长反向操作把好神位放最前，给队友留发言空间。`);
     }
 
     lines.push("");
@@ -540,6 +545,7 @@
       "run-sheriff": "警长竞选是否上警",
       "self-explode": "狼人是否自爆",
       "pass-badge": "警徽流转",
+      "sheriff-direction": "警徽流方向（从我左/右起）",
     }[kind] || kind;
   }
 
@@ -575,6 +581,7 @@
     "run-sheriff":   [{ name: "run_for_sheriff", description: "决定是否上警",         input_schema: { type: "object", properties: withBeliefs({ thinking: THINK, run: { type: "boolean", description: "true=上警，false=不上" } }), required: ["thinking", "run"] } }],
     "self-explode":  [{ name: "self_explode",    description: "决定是否立即自爆",     input_schema: { type: "object", properties: withBeliefs({ thinking: THINK, explode: { type: "boolean", description: "true=自爆，false=不爆" } }), required: ["thinking", "explode"] } }],
     "pass-badge":    [{ name: "pass_badge",      description: "决定警徽流转目标",     input_schema: { type: "object", properties: withBeliefs({ thinking: THINK, target: { type: "integer", description: "接徽玩家座位号 1-12，-1 撕毁" } }), required: ["thinking", "target"] } }],
+    "sheriff-direction": [{ name: "sheriff_direction", description: "警长当选后宣布警徽流方向（今天从我左/右起发言）", input_schema: { type: "object", properties: withBeliefs({ thinking: THINK, direction: { type: "integer", enum: [-1, 1], description: "+1=顺时针(座位号递增方向，即从我下家起)；-1=逆时针(座位号递减方向，即从我上家起)" } }), required: ["thinking", "direction"] } }],
   };
 
   // ===== Provider 实现 =====

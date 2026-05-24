@@ -49,6 +49,7 @@ class Game {
     this.sheriffElectionDone = false;
     this.wolfHasExploded = false;
     this.sheriffIdx = -1;       // 当前警长 idx
+    this.sheriffDirection = 1;  // 警徽流方向：+1 = 顺时针(座位号增)，-1 = 逆时针；无警长时默认 +1
   }
 
   isCurrent() { return this === currentGame && this.running; }
@@ -78,6 +79,7 @@ class Game {
     this.sheriffElectionDone = false;
     this.wolfHasExploded = false;
     this.sheriffIdx = -1;
+    this.sheriffDirection = 1;
     this.agents.forEach(a => a.reset());
     this.assignRoles();
   }
@@ -460,11 +462,12 @@ class Game {
         await this.wait();
       }
 
-      // 发言阶段
+      // 发言阶段：真实狼人杀规则的起手位
+      //   有警长：从警长按警徽流方向走，第一个活人起手；警长自己在轮到时正常发
+      //   无警长 + 有昨夜死者：从死者按 +1 方向第一个活人起手
+      //   其他（D1 无警长 / 平安夜无警长）：从 1 号起手
       UI.setPhase("day", this.day, "依次发言…");
-      const alive = this.aliveAgents();
-      const startIdx = (this.day - 1) % alive.length;
-      const order = alive.slice(startIdx).concat(alive.slice(0, startIdx));
+      const order = this._computeSpeechOrder();
       let interrupted = false;
       for (const a of order) {
         if (!a.alive) continue;
@@ -491,6 +494,33 @@ class Game {
         console.warn(`[dayPhase] flush day ${this.day} memory failed:`, e?.message || e);
       }
     }
+  }
+
+  // 真实狼人杀规则下的白天发言顺序：返回 alive agent 数组，按发言先后排
+  //   方向 dir：警长警徽流方向（无警长时取已记录方向或默认 +1）
+  //   锚点 anchorIdx：昨夜死者优先（"从死者下家起"）→ 警长（平安夜从警长邻位起）→ -1（无警长平安夜，从 1 号起）
+  //   从锚点按 dir 走一圈（step=1..N），收集活人；锚点本人是活人时在 step=N 加入末尾
+  _computeSpeechOrder() {
+    const N = this.agents.length;
+    if (this.aliveAgents().length === 0) return [];
+
+    const nightDeaths = this.history.filter(h => h.day === this.day && h.cause === "night");
+    const dir = (this.sheriffIdx >= 0 || this.sheriffDirection) ? (this.sheriffDirection || 1) : 1;
+    let anchorIdx;
+    if (nightDeaths.length > 0) {
+      anchorIdx = nightDeaths[0].idx;          // 死者下家起手（真实规则常见做法）
+    } else if (this.sheriffIdx >= 0) {
+      anchorIdx = this.sheriffIdx;             // 平安夜：从警长邻位起
+    } else {
+      anchorIdx = -1;                          // 无警长 + 平安夜：从 1 号起手
+    }
+
+    const order = [];
+    for (let step = 1; step <= N; step++) {
+      const i = ((anchorIdx + dir * step) % N + N) % N;
+      if (this.agents[i].alive) order.push(this.agents[i]);
+    }
+    return order;
   }
 
   /* V2.9-2 ============ 每轮复盘（事实 + LLM 推断）============ */
@@ -613,6 +643,7 @@ class Game {
       const w = runners[0];
       this._setSheriff(w.idx);
       UI.log("day", `🎖 仅 <span class="who">${w.no}号 ${w.name}</span> 上警，自动当选警长。`);
+      await this._decideAndAnnounceSheriffDirection(w.idx);
       return;
     }
 
@@ -649,6 +680,7 @@ class Game {
         this._setSheriff(w2[0]);
         const a = this.agents[w2[0]];
         UI.log("day", `🎖 <span class="who">${a.no}号 ${a.name}</span> 当选警长（PK ${max2} 票）`);
+        await this._decideAndAnnounceSheriffDirection(w2[0]);
       } else {
         UI.log("day", `🎖 PK 仍平票，警徽撕毁，本局无警长。`);
       }
@@ -656,9 +688,25 @@ class Game {
       const w = this.agents[winners[0]];
       this._setSheriff(w.idx);
       UI.log("day", `🎖 <span class="who">${w.no}号 ${w.name}</span> 当选警长（${max} 票）`);
+      await this._decideAndAnnounceSheriffDirection(w.idx);
     }
     this.later(() => UI.clearAllVotes(), 1500);
     await this.wait(600);
+  }
+
+  // 警长当选后宣布"警徽流"方向（从我左/右起发言）。LLM 二选一，规则版兜底随机。
+  async _decideAndAnnounceSheriffDirection(sheriffIdx) {
+    const sheriff = this.agents[sheriffIdx];
+    let dir = 1;
+    try {
+      const d = await sheriff.decideSheriffDirection(this);
+      dir = (d === -1) ? -1 : 1;
+    } catch (e) {
+      console.warn("[sheriffDirection] decide failed, default +1:", e?.message || e);
+    }
+    this.sheriffDirection = dir;
+    const dirCn = dir === 1 ? "顺时针（座位号递增方向）" : "逆时针（座位号递减方向）";
+    UI.log("day", `🎖 警长 <span class="who">${sheriff.no}号</span> 宣布警徽流：${dirCn}`);
   }
 
   _setSheriff(idx) {

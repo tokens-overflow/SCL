@@ -664,6 +664,45 @@ class Agent {
     return Math.random() < 0.10 * Math.max(0, this.personality.talkative - 0.4);
   }
 
+  // 警长当选后宣布警徽流方向，返回 +1（顺时针/座位号递增）或 -1（逆时针）
+  async decideSheriffDirection(game) {
+    if (!this.alive) return 1;
+    const llmRes = await LLM.decide({
+      agent: this, game, kind: "sheriff-direction",
+      context: this._publicContext(game),
+    });
+    if (llmRes && (llmRes.direction === -1 || llmRes.direction === 1)) {
+      return llmRes.direction;
+    }
+    return this._ruleSheriffDirection(game);
+  }
+
+  // 规则版兜底：高怀疑度位放前面（好人视角让狼先发暴露逻辑；狼视角反向，给队友铺路）
+  _ruleSheriffDirection(game) {
+    const N = game.agents.length;
+    const myIdx = this.idx;
+    // 顺时针方向第一个活人 vs 逆时针方向第一个活人，比较他们的怀疑度
+    let cwIdx = -1, ccwIdx = -1;
+    for (let step = 1; step <= N && (cwIdx < 0 || ccwIdx < 0); step++) {
+      if (cwIdx < 0) {
+        const i = (myIdx + step) % N;
+        if (game.agents[i].alive) cwIdx = i;
+      }
+      if (ccwIdx < 0) {
+        const i = (myIdx - step + N) % N;
+        if (game.agents[i].alive) ccwIdx = i;
+      }
+    }
+    if (cwIdx < 0 || ccwIdx < 0) return 1;
+    const cwSus = this.suspicion[cwIdx] || 0;
+    const ccwSus = this.suspicion[ccwIdx] || 0;
+    // 好人 / 神职：把更可疑的人放第一个发（让他先暴露破绽）
+    // 狼人：反向，把更不可疑的好人放第一个发（消耗好人发言时间，给狼队铺垫）
+    const isGood = this.role !== "wolf";
+    if (isGood) return cwSus >= ccwSus ? 1 : -1;
+    return cwSus < ccwSus ? 1 : -1;
+  }
+
   async sheriffVote(game, runners) {
     if (!this.alive) return -1;
     // ── LLM 决策优先 ──
