@@ -14,6 +14,68 @@ Self-Ask / Decomposition 范式完整示例
 import json
 import anthropic
 
+# ─── 终端彩色输出工具（VSCode Terminal 适用）────────────────────────
+class C:
+    RESET="[0m"; BOLD="[1m"; DIM="[2m"
+    RED="[31m"; GREEN="[32m"; YELLOW="[33m"
+    BLUE="[34m"; MAGENTA="[35m"; CYAN="[36m"
+    BRED="[91m"; BGREEN="[92m"; BYELLOW="[93m"
+    BBLUE="[94m"; BMAGENTA="[95m"; BCYAN="[96m"
+
+def banner(title: str, sub: str = "", width: int = 64) -> None:
+    line = "═" * width
+    print(f"\n{C.BCYAN}{C.BOLD}{line}")
+    print(f"  {title}")
+    if sub:
+        print(f"  {C.DIM}{sub}{C.BCYAN}{C.BOLD}")
+    print(f"{line}{C.RESET}")
+
+def section(title: str) -> None:
+    line = "─" * 60
+    print(f"\n{C.CYAN}{C.BOLD}{line}\n  {title}\n{line}{C.RESET}")
+
+def info(label: str, value: str = "") -> None:
+    if value:
+        print(f"  {C.BBLUE}▸{C.RESET} {C.BOLD}{label}:{C.RESET} {value}")
+    else:
+        print(f"  {C.BBLUE}▸{C.RESET} {label}")
+
+def ok(msg: str) -> None:
+    print(f"  {C.BGREEN}✓{C.RESET} {msg}")
+
+def warn(msg: str) -> None:
+    print(f"  {C.BYELLOW}⚠{C.RESET} {msg}")
+
+def err(msg: str) -> None:
+    print(f"  {C.BRED}✗{C.RESET} {msg}")
+
+def show(label: str, text: str, color: str = "") -> None:
+    color = color or C.YELLOW
+    print(f"\n  {color}{C.BOLD}▣ {label}{C.RESET}")
+    for ln in str(text).split("\n"):
+        print(f"    {ln}")
+# ─────────────────────────────────────────────────────────────
+
+def safe_json(text: str) -> dict:
+    """容错 JSON 解析：剥除 markdown 代码块，提取内嵌 JSON 对象"""
+    import re as _re
+    cleaned = text.strip()
+    cleaned = _re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+    cleaned = _re.sub(r"\n?```\s*$", "", cleaned).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        m = _re.search(r"(\{[\s\S]*?\}|\[[\s\S]*?\])", cleaned)
+        if m:
+            try:
+                return json.loads(m.group(1))
+            except json.JSONDecodeError:
+                pass
+        warn(f"JSON 解析失败 (前80字): {cleaned[:80]}")
+        return {}
+
+
+
 client = anthropic.Anthropic()
 
 # ============================================================
@@ -25,7 +87,7 @@ DECOMPOSER_SYSTEM = """你是一个问题分析专家。
 
 判断标准：
 - 问题涉及多个独立的知识点或步骤 → 需要拆解
-- 问题需要先获取某些前置信息才能回答 → 需要拆解
+- 问题需要先获取某些前置信息才能回答 → 需要拆解  
 - 问题简单、直接，一步能回答 → 直接回答
 
 输出严格的 JSON：
@@ -86,21 +148,14 @@ COMBINER_SYSTEM = """你是一个综合分析专家。
 # Decomposition 主函数（支持递归）
 # ============================================================
 def decompose_and_solve(question: str, depth: int = 0, max_depth: int = 3) -> str:
-    """
-    递归拆解并解决问题
-    - depth：当前递归深度
-    - max_depth：最大递归深度，防止无限递归
-    """
     indent = "  " * depth
     print(f"\n{indent}{'─'*50}")
     print(f"{indent}问题（深度{depth}）：{question}")
 
-    # 防止过深递归
     if depth >= max_depth:
         print(f"{indent}⚠️  达到最大深度，直接回答")
         return direct_solve(question)
 
-    # Step 1：判断是否需要拆解
     decompose_response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=600,
@@ -109,24 +164,18 @@ def decompose_and_solve(question: str, depth: int = 0, max_depth: int = 3) -> st
     )
 
     text = decompose_response.content[0].text.strip()
-    text = text.replace("```json", "").replace("```", "").strip()
-
-    try:
-        analysis = json.loads(text)
-    except json.JSONDecodeError:
-        print(f"{indent}JSON 解析失败，直接回答")
+    analysis = safe_json(text)
+    if not analysis:
         return direct_solve(question)
 
     print(f"{indent}分析：{analysis.get('reason', '')}")
 
-    # Case 1：可以直接回答
     if analysis.get("can_answer_directly", True):
         print(f"{indent}✅ 直接回答")
         answer = direct_solve(question)
-        print(f"{indent}答案：{answer[:100]}...")
+        ok(f"答案: {answer}")
         return answer
 
-    # Case 2：需要拆解
     sub_questions = analysis.get("sub_questions", [])
     combination_strategy = analysis.get("combination_strategy", "综合各子问题答案")
 
@@ -134,13 +183,11 @@ def decompose_and_solve(question: str, depth: int = 0, max_depth: int = 3) -> st
     for i, sq in enumerate(sub_questions):
         print(f"{indent}  {i+1}. {sq}")
 
-    # Step 2：递归解决每个子问题
     sub_answers = {}
     for sq in sub_questions:
         answer = decompose_and_solve(sq, depth + 1, max_depth)
         sub_answers[sq] = answer
 
-    # Step 3：组合所有子答案
     print(f"\n{indent}🔗 [组合答案]")
     print(f"{indent}策略：{combination_strategy}")
 
@@ -189,7 +236,7 @@ def self_ask_agent(question: str) -> str:
     print(f"\n{'='*60}")
     print(f"Self-Ask Agent")
     print(f"问题：{question}")
-    print(f"{'='*60}")
+    print()
 
     answer = decompose_and_solve(question, depth=0, max_depth=3)
 
@@ -202,19 +249,16 @@ def self_ask_agent(question: str) -> str:
 # 测试
 # ============================================================
 if __name__ == "__main__":
-    # 测试1：简单问题（不需要拆解）
     self_ask_agent("Python 的 GIL 是什么？")
 
     print("\n\n")
 
-    # 测试2：需要拆解的复杂问题
     self_ask_agent(
         "我想用 Python 开发一个 Web 应用并部署到云上，需要掌握哪些技术，大概需要多长时间学习？"
     )
 
     print("\n\n")
 
-    # 测试3：多层嵌套（子问题还需要拆解）
     self_ask_agent(
         "比较 React 和 Vue 在大型企业项目中的优劣，并给出技术选型建议"
     )

@@ -13,6 +13,68 @@ Plan & Execute 范式完整示例
 import json
 import anthropic
 
+# ─── 终端彩色输出工具（VSCode Terminal 适用）────────────────────────
+class C:
+    RESET="[0m"; BOLD="[1m"; DIM="[2m"
+    RED="[31m"; GREEN="[32m"; YELLOW="[33m"
+    BLUE="[34m"; MAGENTA="[35m"; CYAN="[36m"
+    BRED="[91m"; BGREEN="[92m"; BYELLOW="[93m"
+    BBLUE="[94m"; BMAGENTA="[95m"; BCYAN="[96m"
+
+def banner(title: str, sub: str = "", width: int = 64) -> None:
+    line = "═" * width
+    print(f"\n{C.BCYAN}{C.BOLD}{line}")
+    print(f"  {title}")
+    if sub:
+        print(f"  {C.DIM}{sub}{C.BCYAN}{C.BOLD}")
+    print(f"{line}{C.RESET}")
+
+def section(title: str) -> None:
+    line = "─" * 60
+    print(f"\n{C.CYAN}{C.BOLD}{line}\n  {title}\n{line}{C.RESET}")
+
+def info(label: str, value: str = "") -> None:
+    if value:
+        print(f"  {C.BBLUE}▸{C.RESET} {C.BOLD}{label}:{C.RESET} {value}")
+    else:
+        print(f"  {C.BBLUE}▸{C.RESET} {label}")
+
+def ok(msg: str) -> None:
+    print(f"  {C.BGREEN}✓{C.RESET} {msg}")
+
+def warn(msg: str) -> None:
+    print(f"  {C.BYELLOW}⚠{C.RESET} {msg}")
+
+def err(msg: str) -> None:
+    print(f"  {C.BRED}✗{C.RESET} {msg}")
+
+def show(label: str, text: str, color: str = "") -> None:
+    color = color or C.YELLOW
+    print(f"\n  {color}{C.BOLD}▣ {label}{C.RESET}")
+    for ln in str(text).split("\n"):
+        print(f"    {ln}")
+# ─────────────────────────────────────────────────────────────
+
+def safe_json(text: str) -> dict:
+    """容错 JSON 解析：剥除 markdown 代码块，提取内嵌 JSON 对象"""
+    import re as _re
+    cleaned = text.strip()
+    cleaned = _re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+    cleaned = _re.sub(r"\n?```\s*$", "", cleaned).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        m = _re.search(r"(\{[\s\S]*?\}|\[[\s\S]*?\])", cleaned)
+        if m:
+            try:
+                return json.loads(m.group(1))
+            except json.JSONDecodeError:
+                pass
+        warn(f"JSON 解析失败 (前80字): {cleaned[:80]}")
+        return {}
+
+
+
 client = anthropic.Anthropic()
 
 # ============================================================
@@ -129,12 +191,9 @@ def execute_tool(tool: str, input_text: str) -> str:
 # Plan & Execute 主流程
 # ============================================================
 def plan_and_execute(task: str) -> str:
-    print(f"\n{'='*60}")
-    print(f"任务：{task}")
-    print(f"{'='*60}")
+    banner('Plan & Execute · 先规划后执行', f'任务: {task}')
 
-    # ── 阶段一：规划 ──────────────────────────────────────────
-    print("\n📋 [规划阶段]")
+    section("📋 规划阶段")
     plan_response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1000,
@@ -143,18 +202,15 @@ def plan_and_execute(task: str) -> str:
     )
 
     plan_text = plan_response.content[0].text.strip()
-    # 清理可能的 markdown 代码块
-    plan_text = plan_text.replace("```json", "").replace("```", "").strip()
-    plan = json.loads(plan_text)
+    plan = safe_json(plan_text)
 
-    print(f"目标：{plan['goal']}")
-    print(f"共 {len(plan['steps'])} 个步骤：")
+    info('目标', plan['goal'])
+    info('步骤数', str(len(plan['steps'])))
     for step in plan["steps"]:
-        print(f"  Step {step['id']}: {step['description']}")
+        info(f"  Step {step['id']}", step['description'])
 
-    # ── 阶段二：逐步执行 ──────────────────────────────────────
-    print("\n⚙️  [执行阶段]")
-    results = []  # 记录每步结果，后续步骤可以引用
+    section("⚙️  执行阶段")
+    results = []
 
     steps = plan["steps"]
     i = 0
@@ -162,7 +218,6 @@ def plan_and_execute(task: str) -> str:
         step = steps[i]
         print(f"\n[Step {step['id']}] {step['description']}")
 
-        # 构建执行上下文：包含前面所有步骤的结果
         context = ""
         if results:
             context = "前面步骤的执行结果：\n"
@@ -179,7 +234,6 @@ def plan_and_execute(task: str) -> str:
 
 请执行当前步骤。"""
 
-        # 先用工具，再让 LLM 整理结果
         tool_result = execute_tool(step["tool"], step["input"])
 
         exec_response = client.messages.create(
@@ -193,7 +247,7 @@ def plan_and_execute(task: str) -> str:
         )
 
         step_result = exec_response.content[0].text
-        print(f"结果：{step_result[:100]}...")
+        show('步骤结果', step_result)
 
         results.append({
             "id": step["id"],
@@ -201,7 +255,6 @@ def plan_and_execute(task: str) -> str:
             "result": step_result
         })
 
-        # 检查是否需要重新规划（简单示例：结果包含"失败"则重规划）
         if "失败" in step_result or "错误" in step_result:
             print(f"\n⚠️  Step {step['id']} 遇到问题，重新规划剩余步骤...")
             remaining_steps = plan_and_replan(task, results, steps[i+1:])
@@ -210,7 +263,6 @@ def plan_and_execute(task: str) -> str:
 
         i += 1
 
-    # ── 阶段三：汇总最终结果 ──────────────────────────────────
     print("\n📝 [汇总阶段]")
     summary_response = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -251,8 +303,7 @@ def plan_and_replan(task: str, completed: list, remaining: list) -> list:
         }]
     )
     text = replan_response.content[0].text.strip()
-    text = text.replace("```json", "").replace("```", "").strip()
-    return json.loads(text).get("steps", remaining)
+    return safe_json(text).get("steps", remaining)
 
 
 # ============================================================
