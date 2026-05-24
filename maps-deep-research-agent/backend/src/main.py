@@ -51,16 +51,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         provider = get_active_provider_info(config.llm_config_path)
         logger.info(
-            "Starting Maps Deep Research Agent: provider={} model={} max_tasks={} concurrency={}",
+            "Maps Deep Research Agent 启动：provider={} model={} max_tasks={} concurrency={}",
             provider["active"],
             provider["model"],
             config.max_tasks,
             config.task_concurrency,
         )
     except Exception as exc:
-        logger.warning("Could not read LLMConfig.yaml at startup: {}", exc)
+        logger.warning("启动时读取 LLMConfig.yaml 失败：{}", exc)
     yield
-    # Lazy singleton may not exist if no request was served.
+    # 若全程没有请求，agent 单例不会被创建
     global _agent_singleton
     if _agent_singleton is not None:
         await _agent_singleton.aclose()

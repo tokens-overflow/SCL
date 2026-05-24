@@ -1,4 +1,4 @@
-"""Convert a user topic into a validated task DAG via DeepSeek JSON mode."""
+"""通过 LLM 的 JSON 输出模式，把用户主题转成校验过的任务 DAG。"""
 
 from __future__ import annotations
 
