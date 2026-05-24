@@ -38,8 +38,8 @@ class Configuration(BaseSettings):
         description="DeepSeek OpenAI-compatible endpoint",
     )
     deepseek_model: str = Field(
-        default="deepseek-chat",
-        description="Underlying DeepSeek model id. Project-facing name is 'deepseek-pro'.",
+        default="deepseek-v4-flash",
+        description="Underlying DeepSeek model id. Reference: https://api-docs.deepseek.com/zh-cn/",
     )
     deepseek_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     deepseek_timeout: int = Field(default=60, ge=1)
