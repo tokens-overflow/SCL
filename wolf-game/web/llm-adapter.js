@@ -476,6 +476,9 @@
       const totalAlive = (context.players || []).filter(p => p.alive).length;
       lines.push(`【警长竞选 · 是否上警】场上活人 ${totalAlive}。`);
       lines.push(`12 人神局典型上警 3-6 人。请结合你的角色 SOP（系统 prompt 已注入）和当前局面自行判断。`);
+      if (context.me.sheriffMood) {
+        lines.push(`★ 本局氛围【${context.me.sheriffMood.cn}】预期上警 ${context.me.sheriffMood.expectedRuns}：${context.me.sheriffMood.hint}`);
+      }
       if (context.me.role === "wolf" && context.me.wolfTactic) {
         // 狼队战术分工属于机制铁律（开局洗牌固定分配），不是上警偏好，必须保留
         lines.push(`★ 你是狼，战术分工=【${context.me.wolfTactic}】，按分工铁律执行：`);

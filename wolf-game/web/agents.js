@@ -641,10 +641,10 @@ class Agent {
   }
 
   _ruleDecideRunForSheriff(game) {
-    // 规则版兜底（仅 LLM 失败时走）:中性化,让平民/神职也有合理上警概率,贴近真实场上 3-6 人上警
+    // 规则版兜底（仅 LLM 失败时走）:基线概率 × 本局 sheriffMood.probFactor
     if (this.role === "seer") return true;                          // 预言家铁律必上
     if (this.role === "wolf") {
-      // 狼按战术分工(机制铁律,与 role_wolf.md 对齐):悍跳必上 / 倒钩可上 / 冲锋少上 / 深水不上
+      // 狼按战术分工(机制铁律): 悍跳必上 / 倒钩可上 / 冲锋少上 / 深水不上 —— mood 不影响狼
       let p = 0;
       switch (this.wolfTactic) {
         case "悍跳狼": p = 1.0; break;
@@ -657,12 +657,14 @@ class Agent {
       this._intendsToRunSheriff = willRun;
       return willRun;
     }
-    // 神职/平民:基线 + 性格(talkative)加成,让兜底场景下也能产生 3-6 人上警分布
-    if (this.role === "witch")   return Math.random() < (0.15 + 0.20 * this.personality.talkative);  // ~15-35%
-    if (this.role === "guard")   return Math.random() < (0.15 + 0.20 * this.personality.talkative);
-    if (this.role === "hunter")  return Math.random() < (0.25 + 0.25 * this.personality.talkative);  // ~25-50%
-    // 村民:基线 20% + 性格加成,满分性格 ~50%
-    return Math.random() < (0.20 + 0.30 * this.personality.talkative);
+    // 神职/平民:基线 + 性格加成, 乘 mood.probFactor, clamp 到 [0, 0.95]
+    const factor = game.sheriffMood?.probFactor ?? 1.0;
+    let base;
+    if (this.role === "witch" || this.role === "guard") base = 0.15 + 0.20 * this.personality.talkative;
+    else if (this.role === "hunter")                    base = 0.25 + 0.25 * this.personality.talkative;
+    else                                                base = 0.20 + 0.30 * this.personality.talkative;  // 村民
+    const p = Math.min(0.95, base * factor);
+    return Math.random() < p;
   }
 
   // 警长当选后宣布警徽流方向，返回 +1（顺时针/座位号递增）或 -1（逆时针）
@@ -998,6 +1000,13 @@ Agent.prototype._publicContext = function (game) {
     roundSummaries: (game.roundSummaries || []).slice(-2),
     sheriffElectionDone: game.sheriffElectionDone,
     wolfHasExploded: game.wolfHasExploded,
+    // 本局警上氛围（影响 run-sheriff prompt 提示 + 规则版兜底概率）
+    sheriffMood: game.sheriffMood ? {
+      cn: game.sheriffMood.cn,
+      expectedRuns: game.sheriffMood.expectedRuns,
+      hint: game.sheriffMood.hint,
+      probFactor: game.sheriffMood.probFactor,
+    } : null,
     // 狼人专属：往日狼队夜晚日志（提议 + 终选 + 实际死亡）
     wolfNightLog: this.role === "wolf" && typeof Events !== "undefined"
       ? Events.renderWolfNightLog(game.events || [], game.day)

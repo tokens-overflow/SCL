@@ -20,6 +20,25 @@ const ROLE_META = {
   villager: { cn: "村民",   emoji: "👨‍🌾", cls: "villager" },
 };
 
+// 本局警上 mood：模拟真实场上"有时大家都不想露身位，有时警上群魔乱舞"的波动
+// reset() 时按 weight 抽一个，注入到所有 agent 的 _publicContext 影响 LLM 决策，规则版兜底乘 probFactor
+// 调权重立即生效，无需重启
+const SHERIFF_MOODS = [
+  { key: "quiet",    cn: "安静",   weight: 15, expectedRuns: "2-3 人",  probFactor: 0.5, hint: "今天大家都比较谨慎，倾向藏身位，预期上警人数较少。" },
+  { key: "standard", cn: "标准",   weight: 50, expectedRuns: "4-6 人",  probFactor: 1.0, hint: "今天气氛标准，按常规战术决定即可。" },
+  { key: "active",   cn: "活跃",   weight: 25, expectedRuns: "7-9 人",  probFactor: 1.6, hint: "今天玩家普遍想要警徽身位，警上会比较拥挤。" },
+  { key: "chaos",    cn: "混乱",   weight: 8,  expectedRuns: "10-11 人", probFactor: 2.5, hint: "今天警上群魔乱舞，绝大多数人都会上警，警下票稀缺。" },
+  { key: "frenzy",   cn: "全员上警", weight: 2, expectedRuns: "12 人(警徽撕毁)", probFactor: 4.0, hint: "今天全场都想上警，几乎肯定会触发警徽撕毁。" },
+];
+function pickSheriffMood() {
+  const total = SHERIFF_MOODS.reduce((s, m) => s + m.weight, 0);
+  let r = Math.random() * total;
+  for (const m of SHERIFF_MOODS) {
+    if ((r -= m.weight) <= 0) return m;
+  }
+  return SHERIFF_MOODS[1];
+}
+
 let GAME_GENERATION = 0;
 
 class Game {
@@ -50,6 +69,7 @@ class Game {
     this.wolfHasExploded = false;
     this.sheriffIdx = -1;       // 当前警长 idx
     this.sheriffDirection = 1;  // 警徽流方向：+1 = 顺时针(座位号增)，-1 = 逆时针；无警长时默认 +1
+    this.sheriffMood = SHERIFF_MOODS[1]; // 本局警上氛围（reset 时按权重抽一个，影响 LLM 提示 + 兜底概率）
   }
 
   isCurrent() { return this === currentGame && this.running; }
@@ -80,6 +100,8 @@ class Game {
     this.wolfHasExploded = false;
     this.sheriffIdx = -1;
     this.sheriffDirection = 1;
+    this.sheriffMood = pickSheriffMood();
+    UI.log("day", `🎭 本局警上氛围：【${this.sheriffMood.cn}】预期上警 ${this.sheriffMood.expectedRuns}`);
     this.agents.forEach(a => a.reset());
     this.assignRoles();
   }
