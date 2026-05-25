@@ -293,27 +293,31 @@ class Agent {
     const actions = [];
     let savedThisNight = false;
 
-    // ── 救：仅首夜可见刀口（A3/A8），第 2 夜起女巫看不到刀口 → 跳过 ──
-    if (this.witchHasSave && game.day === 1 && game.tonightKill !== null) {
+    // ── 救：只要解药未用(witchHasSave)就能看到刀口(任意夜)；但自救仅限首夜(system_base A8 未改) ──
+    if (this.witchHasSave && game.tonightKill !== null) {
       const killed = game.tonightKill;
       const isSelf = (killed === this.idx);
-      let save = null;
-      const llmSave = await LLM.decide({
-        agent: this, game, kind: "witch-save",
-        context: this._publicContext(game),
-        options: { killedNo: game.agents[killed].no, isSelf, day: game.day },
-      });
-      if (llmSave && typeof llmSave.save === "boolean") {
-        save = llmSave.save;
+      const canSave = !isSelf || game.day === 1;   // 救他人:任意夜；救自己:仅首夜
+      if (canSave) {
+        let save = null;
+        const llmSave = await LLM.decide({
+          agent: this, game, kind: "witch-save",
+          context: this._publicContext(game),
+          options: { killedNo: game.agents[killed].no, isSelf, day: game.day },
+        });
+        if (llmSave && typeof llmSave.save === "boolean") {
+          save = llmSave.save;
+        }
+        if (save === null) {
+          // 规则回退：默认救人
+          save = true;
+        }
+        if (save) {
+          actions.push({ type: "witch-save", target: killed });
+          savedThisNight = true;
+        }
       }
-      if (save === null) {
-        // 规则回退：首夜默认救人
-        save = true;
-      }
-      if (save) {
-        actions.push({ type: "witch-save", target: killed });
-        savedThisNight = true;
-      }
+      // isSelf && day>1：女巫得知了刀口但不能自救，不产生救人动作
     }
 
     // ── 毒：第 2 夜起；A3 同一晚不可解+毒并用，首夜已救则跳过 ──

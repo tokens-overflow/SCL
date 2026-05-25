@@ -461,7 +461,7 @@
       lines.push(`提示：优先验高怀疑度、强发言者；其次验跳神位 / 帮狼带节奏的人。`);
     } else if (kind === "witch-save") {
       lines.push(`【女巫·解药】今晚被刀目标：${options.killedNo}号${options.isSelf ? "（就是你自己！）" : ""}`);
-      lines.push(`A3/A8 强制规则：女巫**仅第一晚**能看到刀口、**仅第一晚**可自救；同一晚解+毒不能并用。`);
+      lines.push(`强制规则：解药未使用时**任意夜都能看到刀口**；但**仅第一晚**可自救（第 2 夜起即使被刀也不能救自己）；同一晚解+毒不能并用。`);
       lines.push(`提示：首夜默认救人；其他场景按优先级保关键神职。`);
     } else if (kind === "witch-poison") {
       lines.push(`【女巫·毒药】第 ${context.day} 夜（毒药仅第 2 夜起可用）`);
