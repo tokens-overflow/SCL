@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "demo-filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${CLAUDE_PLUGIN_ROOT}/mcp-data"
+      ],
+      "env": {}
+    }
+  }
+}

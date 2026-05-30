@@ -1,0 +1,24 @@
+{
+  "name": "scl-demo-marketplace",
+  "owner": {
+    "name": "tokens-overflow",
+    "email": "songchunliang1985@yahoo.com"
+  },
+  "metadata": {
+    "description": "一个用于演示 Claude Code 插件完整能力的示例市场（marketplace）。",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "hello-toolkit",
+      "source": "./plugins/hello-toolkit",
+      "description": "完整的可安装 Claude Code 插件示例：包含斜杠命令、子代理(agent)、技能(skill)、钩子(hook) 与 MCP 服务器。",
+      "version": "1.0.0",
+      "author": {
+        "name": "tokens-overflow"
+      },
+      "keywords": ["demo", "example", "toolkit", "starter"],
+      "category": "examples"
+    }
+  ]
+}
