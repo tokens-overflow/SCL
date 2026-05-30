@@ -1,0 +1,18 @@
+{
+  "name": "hello-toolkit",
+  "version": "1.0.0",
+  "description": "完整的可安装 Claude Code 插件示例，演示命令、子代理、技能、钩子与 MCP 服务器五大扩展点。",
+  "author": {
+    "name": "tokens-overflow",
+    "email": "songchunliang1985@yahoo.com"
+  },
+  "homepage": "https://github.com/tokens-overflow/scl/tree/main/plugin-demo",
+  "repository": "https://github.com/tokens-overflow/scl",
+  "license": "MIT",
+  "keywords": ["demo", "example", "toolkit", "starter"],
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
+}
