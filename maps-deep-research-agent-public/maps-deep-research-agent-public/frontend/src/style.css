@@ -1,0 +1,122 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  color-scheme: light;
+  color: #1f2933;
+  background-color: #f4f6fa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body,
+html,
+#app {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: #2563eb;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  grid-template-rows: auto 1fr;
+  gap: 16px;
+  padding: 16px;
+  min-height: 100vh;
+}
+
+.app-shell__header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  padding: 14px 20px;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.app-shell__sidebar,
+.app-shell__main {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  padding: 16px;
+  min-height: 200px;
+  overflow: auto;
+}
+
+.app-shell__main {
+  display: grid;
+  grid-template-rows: 320px auto 1fr;
+  gap: 16px;
+}
+
+.panel-title {
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin: 0 0 8px;
+}
+
+.task-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: #f8fafc;
+}
+
+.task-card.status-in_progress {
+  border-color: #2563eb;
+}
+.task-card.status-completed {
+  border-color: #16a34a;
+}
+.task-card.status-failed {
+  border-color: #dc2626;
+}
+.task-card.status-skipped {
+  opacity: 0.7;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e0e7ff;
+  color: #3730a3;
+  margin-left: 6px;
+}
+
+.report-content {
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+.report-content h1,
+.report-content h2 {
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 6px;
+}

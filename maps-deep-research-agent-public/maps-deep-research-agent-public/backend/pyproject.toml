@@ -1,0 +1,53 @@
+[project]
+name = "maps-deep-research-agent"
+version = "0.1.0"
+description = "Automated map-centric deep research agent with pluggable LLM providers (DeepSeek / OpenAI / Anthropic / AWS Bedrock) and Google Maps Platform."
+authors = [{ name = "songchunliang1985" }]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "httpx>=0.27.0",
+    "openai>=1.40.0",
+    "pydantic>=2.7.0",
+    "tenacity>=8.5.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.40.0"]
+bedrock = ["anthropic[bedrock]>=0.40.0"]
+dev = [
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.23.0",
+    "respx>=0.21.0",
+]
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = [
+    "src",
+    "src.core",
+    "src.execution",
+    "src.llm", "src.llm.adapters",
+    "src.llm_tasks",
+    "src.stages",
+    "src.tools", "src.tools.maps",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
