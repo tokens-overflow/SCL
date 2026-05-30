@@ -32,10 +32,11 @@ plugin-demo/
         │   └── release-notes/
         │       └── SKILL.md          # 技能：发布说明
         ├── hooks/
-        │   └── hooks.json            # 钩子配置
+        │   └── hooks.json            # 钩子配置（会话级/轮次级/工具级）
         ├── scripts/
-        │   ├── session-start.sh      # SessionStart 钩子脚本
-        │   └── post-edit.sh          # PostToolUse 钩子脚本
+        │   ├── hook-session.sh       # 会话级：SessionStart
+        │   ├── hook-turn.sh          # 轮次级：UserPromptSubmit
+        │   └── hook-tool.sh          # 工具级：PreToolUse
         ├── mcp-data/                 # MCP 沙盒目录
         │   └── README.txt
         └── .mcp.json                 # MCP 服务器配置
@@ -110,11 +111,30 @@ frontmatter 中的 `name`、`description`、`tools`、`model` 定义了一个专
 
 ### 4. 钩子 `hooks/hooks.json`
 
-钩子让你在生命周期事件上执行脚本：
-- `SessionStart`：会话开始时注入上下文。
-- `PostToolUse`（匹配 `Edit|Write|MultiEdit`）：每次写文件后记录日志到 `.edit-log`。
+钩子让你在生命周期事件上执行脚本。本示例特意用**三个不同触发频率**的钩子，配合计数器演示它们的区别——你能直观看到「会话级数字不变 / 轮次级稳步增长 / 工具级涨得最快」：
 
-脚本中使用 `${CLAUDE_PLUGIN_ROOT}` 引用插件根目录，保证路径在任何安装位置都正确。
+| 层级 | 触发频率 | 事件 | 脚本 | 维护的计数器 |
+| --- | --- | --- | --- | --- |
+| 🟢 会话级 | 每个会话**仅一次**（会话开始时） | `SessionStart` | `scripts/hook-session.sh` | `session.count`（新开会话才 +1） |
+| 🟡 轮次级 | **每轮提问一次**（你每发一条消息） | `UserPromptSubmit` | `scripts/hook-turn.sh` | `turn.count`（每轮 +1） |
+| 🔴 工具级 | **每次工具调用一次**（频率最高） | `PreToolUse` | `scripts/hook-tool.sh` | `tool.count`（每次调用 +1） |
+
+运行时计数器写在 `.hook-state/` 目录（已被 `.gitignore` 忽略，不入库）：
+- `session.count`：整个会话期间始终不变，新开会话才 +1。
+- `turn.count`：每轮提问 +1；新会话时归零。
+- `tool.count`：本轮内每次工具调用 +1；每开始新一轮时归零，方便观察「这一轮用了几次工具」。
+- `tool-calls.log`：逐条记录 `[第N轮·本轮第M次] 调用了什么工具`，可 `tail -f` 实时观察。
+
+> 想本地先看效果而不必安装？在 `plugins/hello-toolkit/` 下执行：
+> ```bash
+> export CLAUDE_PLUGIN_ROOT="$(pwd)"
+> scripts/hook-session.sh                          # 开一个会话
+> scripts/hook-turn.sh                             # 第 1 轮
+> echo '{"tool_name":"Read"}' | scripts/hook-tool.sh   # 一次工具调用
+> cat .hook-state/tool-calls.log
+> ```
+
+三个脚本都用 `${CLAUDE_PLUGIN_ROOT}` 引用插件根目录，保证路径在任何安装位置都正确；工具级脚本还演示了如何从 **stdin 读取事件 JSON** 取出 `tool_name`，并以 JSON 形式返回 `permissionDecision: allow` 放行。
 
 ### 5. MCP 服务器 `.mcp.json`
 

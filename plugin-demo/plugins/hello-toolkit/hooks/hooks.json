@@ -5,18 +5,28 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-session.sh"
           }
         ]
       }
     ],
-    "PostToolUse": [
+    "UserPromptSubmit": [
       {
-        "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/post-edit.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-turn.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-tool.sh"
           }
         ]
       }
