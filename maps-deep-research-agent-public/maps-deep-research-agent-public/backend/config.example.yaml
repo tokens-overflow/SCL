@@ -1,0 +1,111 @@
+# ============================================================
+#  Maps Deep Research Agent — 配置模板（mask 版，可提交到 git）
+#
+#  使用方式：
+#    本地开发  → 拷成 backend/config.yaml，把 secret 直填或保留 ${VAR}
+#    云端部署  → 直接以本文件运行：CONFIG_PATH=config.example.yaml python -m src.main
+#                所有 secret 通过平台环境变量注入（Fly.io / Render / Cloud Run 都支持）
+#
+#  ${VAR}              环境变量没设时替换为空字符串
+#  ${VAR:-default}     环境变量没设时使用 default（bash 风格）
+# ============================================================
+
+# -------------------- LLM Providers --------------------------
+llm:
+  # 切换 provider 改这一行即可。云端常用 deepseek（成本低）或 bedrock（同区延迟低）。
+  active: ${LLM_ACTIVE:-deepseek}
+
+  providers:
+
+    # AWS Bedrock 上的 Anthropic Claude
+    bedrock:
+      type: bedrock
+      model: ${BEDROCK_MODEL:-jp.anthropic.claude-sonnet-4-6}
+      aws_access_key_id: ${AWS_ACCESS_KEY_ID}
+      aws_secret_access_key: ${AWS_SECRET_ACCESS_KEY}
+      region_name: ${AWS_REGION:-ap-northeast-1}
+
+    # Anthropic 官方 API
+    anthropic:
+      type: anthropic
+      model: ${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      api_key: ${ANTHROPIC_API_KEY}
+
+    # OpenAI 官方
+    openai:
+      type: openai
+      model: ${OPENAI_MODEL:-gpt-4o}
+      api_key: ${OPENAI_API_KEY}
+
+    # DeepSeek 官方接口（OpenAI 兼容协议）
+    deepseek:
+      type: deepseek
+      model: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      api_key: ${DEEPSEEK_API_KEY}
+      base_url: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+
+    # 便捷别名
+    ds-flash:
+      type: deepseek
+      model: deepseek-v4-flash
+      api_key: ${DEEPSEEK_API_KEY}
+      base_url: https://api.deepseek.com
+
+    ds-pro:
+      type: deepseek
+      model: deepseek-v4-pro
+      api_key: ${DEEPSEEK_API_KEY}
+      base_url: https://api.deepseek.com
+
+# -------------------- Application ----------------------------
+app:
+
+  # HTTP server / FastAPI
+  server:
+    # 云端容器必须 0.0.0.0；本地默认 127.0.0.1
+    host: ${HOST:-0.0.0.0}
+    port: ${PORT:-8000}
+    cors_origins:
+      # ★云端部署务必改成你的真实前端域名；逗号分隔多个
+      - ${CORS_ORIGINS:-http://localhost:5173}
+    log_level: ${LOG_LEVEL:-INFO}
+
+  # Agent 行为
+  agent:
+    max_tasks: 5
+    task_concurrency: 3
+    default_language: zh
+
+  # DAG 调度
+  scheduler:
+    task_stall_timeout_seconds: 30
+
+  # 全局 HTTP 客户端
+  http:
+    timeout_seconds: 20
+
+  # 重试策略
+  retry:
+    maps: { max_attempts: 3, backoff_mult: 0.5, backoff_max: 8 }
+    llm:  { max_attempts: 3, backoff_mult: 0.5, backoff_max: 8 }
+
+  # 两级缓存
+  cache:
+    # ★云端要把 dir 指到挂载的 persistent volume（如 Fly.io volumes），否则重启缓存丢
+    dir: ${CACHE_DIR:-./.cache/maps}
+    ttl_seconds: 86400
+    in_memory_lru_size: 256
+
+  # LLM 调用默认
+  llm_defaults:
+    max_tokens: 8192
+    temperatures:
+      report: 0.3
+      itinerary: 0.4
+
+  # Google Maps Platform
+  maps:
+    api_key: ${GOOGLE_MAPS_API_KEY}
+    default_radius: 3000
+    default_places_limit: 8
+    default_language_code: zh-CN
