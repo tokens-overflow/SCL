@@ -5,7 +5,11 @@ from backend.app.services.order_service import get_logistics as get_logistics_se
 from backend.app.tools.registry import tool
 
 
-@tool("get_logistics", "Get logistics events for a verified user's order.", GetLogisticsInput)
+@tool(
+    "get_logistics",
+    "查询订单的物流轨迹（承运商、运单号、各节点时间线）。需要先核身。",
+    GetLogisticsInput,
+)
 def get_logistics(state: SessionState, p: GetLogisticsInput) -> GetLogisticsResult:
     session = get_session()
     try:

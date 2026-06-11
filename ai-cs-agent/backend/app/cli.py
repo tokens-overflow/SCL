@@ -1,18 +1,18 @@
 """命令行测试入口。
 
 交互模式：
-    uv run python -m backend.cli
+    uv run python -m backend.app.cli
 
 演示场景（多轮脚本自动跑）：
-    uv run python -m backend.cli --scenario 1   # 查物流
-    uv run python -m backend.cli --scenario 2   # 小额退款成功
-    uv run python -m backend.cli --scenario 3   # 大额退款触发护栏转人工
+    uv run python -m backend.app.cli --scenario 1   # 查物流
+    uv run python -m backend.app.cli --scenario 2   # 小额退款成功
+    uv run python -m backend.app.cli --scenario 3   # 大额退款触发护栏转人工
 """
 import argparse
 import sys
 import uuid
 
-from backend.agent import CSAgent
+from backend.app.agent.agent import CSAgent
 
 CYAN, YELLOW, GREEN, RED, RESET = "\033[96m", "\033[93m", "\033[92m", "\033[91m", "\033[0m"
 
