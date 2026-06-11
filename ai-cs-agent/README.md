@@ -1,13 +1,14 @@
 # AI 客服 Agent + CRM Demo
 
-> 一个能真正"办事"的电商客服 Agent：用 Anthropic 原生 tool use 循环直接操作 CRM 数据库——查订单、查物流、改地址、退款、转人工，全程带业务护栏（prompt 软约束 + 代码硬校验，双保险）。
+> 一个能真正"办事"的电商客服 Agent：用原生 tool use 循环直接操作 CRM 数据库——查订单、查物流、改地址、退款、转人工，全程带业务护栏（prompt 软约束 + 代码硬校验，双保险）。LLM 走 YAML 配置，一键切换 Anthropic / OpenAI / DeepSeek。
 
 **不用任何 Agent 框架**（不用 LangChain / LlamaIndex），核心循环只有约 40 行，借此把"工具调用智能体"是怎么跑起来的讲清楚；同时用一套分层后端演示了把 LLM Agent 落到真实业务系统里该有的工程结构。
 
 ## 亮点
 
 - **真·办事，不只是聊天**：工具直接读写 SQLite CRM，admin 面板能实时看到数据被改。
-- **手写 tool use 循环**：`messages.create` → `tool_use` → 执行 → 回填 `tool_result` → 继续，全过程透明可读。
+- **手写 tool use 循环**：`create` → `tool_use` → 执行 → 回填 `tool_result` → 继续，全过程透明可读。
+- **多 provider，YAML 切换**：循环与厂商解耦，`llm.yaml` 改一行就能在 Anthropic / OpenAI / DeepSeek 间切换，同一套工具与护栏通吃。
 - **双保险护栏**：prompt 约束模型"别做"，代码层在工具执行前强制拦截"做不了"——大额退款即使模型想退也退不掉。
 - **Pydantic 即契约**：工具的 JSON Schema 由入参模型 `model_json_schema()` 自动生成，入参校验失败的报错原样回传给模型自我修正。
 - **过程可视化**：前端右侧实时流式展示每一次工具调用的入参与返回，演示效果直观。
@@ -19,7 +20,7 @@
 
 | 层 | 选型 |
 |---|---|
-| LLM | Anthropic SDK（`claude-fable-5`，可切 `claude-opus-4-8`） |
+| LLM | Anthropic / OpenAI / DeepSeek（YAML 配置，原生 SDK，无框架） |
 | 后端 | FastAPI + Uvicorn（REST + WebSocket） |
 | 前端 | NiceGUI（独立进程，纯 HTTP/WS 调后端） |
 | 数据 | SQLite + SQLAlchemy 2.0（`Mapped` / `mapped_column`） |
@@ -43,13 +44,13 @@ flowchart LR
     end
 
     DB[("SQLite CRM<br/>users / orders / refunds<br/>tickets / chat_logs")]
-    Claude["Anthropic API<br/>claude-fable-5"]
+    LLM["LLM Provider<br/>Anthropic / OpenAI / DeepSeek<br/>(llm.yaml 选择)"]
 
     Chat -- "WebSocket" --> WS
     Admin -- "HTTP 轮询" --> REST
     WS --> Agent
-    Agent -- "messages.create<br/>(tools 由 Pydantic 生成)" --> Claude
-    Claude -- "tool_use" --> Agent
+    Agent -- "create<br/>(tools 由 Pydantic 生成)" --> LLM
+    LLM -- "tool_use" --> Agent
     Agent --> Guard --> Tools --> DB
     Agent -- "text / tool_use / tool_result<br/>事件实时回推" --> WS
 ```
@@ -62,13 +63,13 @@ flowchart LR
 
 - Python ≥ 3.11
 - [uv](https://docs.astral.sh/uv/)（包管理与运行）
-- 一个 Anthropic API Key
+- 一个 LLM API Key（Anthropic / OpenAI / DeepSeek 任一，看你在 `llm.yaml` 启用哪个）
 
 ### 安装与造数
 
 ```bash
 cd ai-cs-agent
-cp .env.example .env               # 填入 ANTHROPIC_API_KEY
+cp .env.example .env               # 填入启用 provider 的 API Key（默认 ANTHROPIC_API_KEY）
 uv sync                            # 安装依赖
 uv run python -m backend.app.seed  # 造数：15 用户 / 50 订单 / 退款单 / 工单
 ```
@@ -94,18 +95,52 @@ uv run python -m backend.app.cli --scenario 1  # 跑预设演示场景（1/2/3�
 
 ## 配置
 
-所有配置走 `.env`（见 `.env.example`），由 `backend/app/core/config.py` 统一读取：
+分两块：**LLM provider 走 `llm.yaml`**，其余运行参数与密钥走 `.env`。
+
+### LLM provider（`llm.yaml`）
+
+`active` 决定启用哪个 provider；每个 provider 的 `type` 决定用哪个适配器——`anthropic` 走 Claude，`openai` 覆盖 OpenAI 官方与一切 OpenAI 兼容协议（DeepSeek 仅 `base_url` 不同）。`api_key` / `base_url` 用 `${ENV}` 占位，密钥留在 `.env`，不写进 yaml。
+
+```yaml
+active: anthropic            # 改这一行即可切换；或运行时 LLM_PROVIDER=deepseek 覆盖
+
+providers:
+  anthropic:
+    type: anthropic
+    model: claude-fable-5     # 受限时换 claude-opus-4-8
+    api_key: ${ANTHROPIC_API_KEY}
+  openai:
+    type: openai
+    model: gpt-4o
+    api_key: ${OPENAI_API_KEY}
+    base_url: https://api.openai.com/v1
+  deepseek:
+    type: openai              # DeepSeek = OpenAI 兼容协议
+    model: deepseek-chat
+    api_key: ${DEEPSEEK_API_KEY}
+    base_url: https://api.deepseek.com
+```
+
+切换示例：编辑 `active`，或临时覆盖——
+
+```bash
+LLM_PROVIDER=deepseek uv run uvicorn backend.app.api.main:app --port 8000
+LLM_PROVIDER=openai   uv run python -m backend.app.cli --scenario 2
+```
+
+> Anthropic 默认模型 `claude-fable-5` 要求组织开启 30 天数据保留；若组织是零保留（ZDR）配置，请把 `model` 改为 `claude-opus-4-8`。
+
+### 运行参数与密钥（`.env`）
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | —（必填） | Anthropic API Key |
-| `ANTHROPIC_MODEL` | `claude-fable-5` | 模型 ID |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` | — | 对应 provider 的 Key，按需填启用的那个 |
+| `LLM_PROVIDER` | —（用 yaml 的 `active`） | 覆盖启用的 provider |
+| `LLM_CONFIG` | `llm.yaml` | 覆盖配置文件路径 |
 | `DATABASE_URL` | `sqlite:///./crm.db` | 数据库连接串 |
 | `BACKEND_URL` | `http://127.0.0.1:8000` | 前端访问后端的地址 |
 | `MAX_TOOL_ROUNDS` | `10` | 单轮用户消息允许的最大工具调用轮数（防失控） |
 | `REFUND_AUTO_ESCALATE_THRESHOLD` | `200` | 超过此金额（元）的退款不自助执行，自动转人工 |
-
-> 默认模型 `claude-fable-5` 要求组织开启 30 天数据保留；若你的组织是零保留（ZDR）配置，请改用 `ANTHROPIC_MODEL=claude-opus-4-8`。
 
 ## 三个演示场景
 
@@ -150,12 +185,13 @@ uv run python -m backend.app.cli --scenario 1  # 跑预设演示场景（1/2/3�
 1. 前端 `POST /api/sessions` → 后端创建一个 `CSAgent` 实例存入内存，返回 `session_id`。
 2. 前端通过 `WS /ws/chat/{session_id}` 发送 `{"message": "..."}`。
 3. 后端把同步的 `agent.run` 丢进线程池，工具事件经回调实时推回 WebSocket。
-4. `run` 进入循环（上限 `MAX_TOOL_ROUNDS`）：
-   - 带 `tools` 调 `messages.create`；
-   - `stop_reason == "tool_use"` → 逐个执行工具，把 `tool_result` 合并成一条 user 消息回填，**继续循环**让模型据此决定下一步；
-   - 其它 `stop_reason` → 收尾返回最终文本；
-   - `stop_reason == "refusal"`（Fable 安全分类器拒答）→ 返回兜底文案。
-5. 工具执行器 `execute_tool`（`tools/registry.py`）是一道"漏斗"：Pydantic 校验入参 → 调 handler → 出参 `model_dump_json`。失败分三类原样回传给模型（未知工具 / 入参校验失败 / 护栏拦截 `GuardrailViolation`），模型据此向用户解释或自我修正重试。
+4. `run` 进入循环（上限 `MAX_TOOL_ROUNDS`），全程只跟归一化结构打交道，与具体厂商无关：
+   - 带 `tools` 调 `client.create(...)`（`client` 由 `llm.yaml` 决定是 Anthropic 还是 OpenAI 兼容）；
+   - `stop_reason == "tool_use"` → 逐个执行工具，把 `tool_result` 回填成一条 tool 消息，**继续循环**让模型据此决定下一步；
+   - `stop_reason == "end"` → 收尾返回最终文本；
+   - `stop_reason == "refusal"`（安全分类器拒答）→ 返回兜底文案。
+5. provider 适配器（`llm/anthropic_client.py` / `llm/openai_client.py`）负责把归一化历史翻译成各家 wire format，并把响应翻译回统一的 `LLMResponse(text, tool_calls, stop_reason)`——这是循环能"通吃"多家的关键。
+6. 工具执行器 `execute_tool`（`tools/registry.py`）是一道"漏斗"：Pydantic 校验入参 → 调 handler → 出参 `model_dump_json`。失败分三类原样回传给模型（未知工具 / 入参校验失败 / 护栏拦截 `GuardrailViolation`），模型据此向用户解释或自我修正重试。
 
 ## 8 个工具
 
@@ -191,9 +227,10 @@ uv run python -m backend.app.cli --scenario 1  # 跑预设演示场景（1/2/3�
 
 ```
 ai-cs-agent/
+├── llm.yaml                       # LLM provider 配置（active + providers）
 ├── backend/
 │   └── app/
-│       ├── core/config.py        # 配置（.env / 环境变量，含护栏阈值）
+│       ├── core/config.py        # 运行参数（.env / 环境变量，含护栏阈值）
 │       ├── db/session.py         # SQLAlchemy engine + session
 │       ├── domain/
 │       │   ├── enums.py          # 业务枚举（会员/订单/退款/工单）
@@ -201,7 +238,8 @@ ai-cs-agent/
 │       │   └── schemas/          # 8 个工具的 Pydantic 入参/出参模型（按域拆分）
 │       ├── repositories/         # 纯数据访问（users/orders/refunds/tickets/chat_logs）
 │       ├── services/             # 业务逻辑（identity/order/refund/ticket）+ guardrails 硬护栏
-│       ├── tools/                # 工具注册表 + 8 个工具（Schema 自动生成）
+│       ├── llm/                  # LLM 接入层：base(归一化) + config(YAML) + anthropic/openai 适配器 + factory
+│       ├── tools/                # 工具注册表 + 8 个工具（Schema 自动生成，与厂商无关）
 │       ├── agent/                # tool use 循环（agent.py）+ system prompt（prompt.py）
 │       ├── api/                  # FastAPI：main(入口) + chat(WS) + admin(REST)
 │       ├── seed.py               # 造数脚本
@@ -215,8 +253,9 @@ ai-cs-agent/
 - **domain**：枚举、ORM 模型、工具 I/O schema，无业务逻辑。
 - **repositories**：纯数据访问，输入 `Session` 返回 ORM 对象，不含规则判断。
 - **services**：业务逻辑与硬护栏，是规则的唯一来源。
-- **tools**：把 service 包装成 Anthropic 工具，负责会话级 `Session` 生命周期。
-- **agent**：tool use 循环与 system prompt。
+- **llm**：provider 抽象——归一化类型（`ToolCall` / `LLMResponse`）+ YAML 配置 + 各家适配器，让 agent 与厂商解耦。
+- **tools**：把 service 包装成工具，输出中立 schema，负责会话级 `Session` 生命周期。
+- **agent**：tool use 循环与 system prompt，只依赖 `llm` 的归一化接口。
 - **api**：FastAPI 入口与路由（会话/WebSocket/admin）。
 
 ## 设计取舍与 Demo 限制
@@ -227,6 +266,7 @@ ai-cs-agent/
 - **无鉴权**：核身只是业务流程示意，admin 接口与 WebSocket 都没有身份认证，仅供本地演示。
 - **SQLite 单文件**：默认 `crm.db`；WebSocket 多线程访问已开 `check_same_thread=False`，但并发能力有限。
 - **单号按行数生成**：退款/工单号用"计数 + 1"生成（`services/numbers.py`），非并发安全、跨月可能重号，仅够演示。
-- **同步 SDK + 线程池**：用同步 Anthropic 客户端，靠 `asyncio.to_thread` 不阻塞事件循环；非全异步实现。
+- **同步 SDK + 线程池**：用同步 LLM 客户端，靠 `asyncio.to_thread` 不阻塞事件循环；非全异步实现。
+- **provider 行为差异**：tool calling、`refusal` 语义、对中文/长输出的表现各家不同；切换 provider 后效果可能与 prompt 调校不完全一致，演示场景在 Anthropic 上验证最充分。
 
 生产化方向（留作扩展）：会话/状态外置（Redis/DB）、接入鉴权、单号用数据库序列或雪花 ID、换 PostgreSQL、流式输出 token 级、为工具与护栏补单测。

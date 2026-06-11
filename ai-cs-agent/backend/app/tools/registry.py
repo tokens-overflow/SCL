@@ -35,7 +35,12 @@ def _clean_schema(schema: dict) -> dict:
     return schema
 
 
-def get_anthropic_tools() -> list[dict[str, Any]]:
+def get_tool_specs() -> list[dict[str, Any]]:
+    """中立工具规格：[{name, description, input_schema}]。
+
+    与厂商无关；各 LLM provider 适配器再翻译成自己的 tools 格式
+    （Anthropic 的 input_schema / OpenAI 的 function.parameters）。
+    """
     return [
         {
             "name": t.name,

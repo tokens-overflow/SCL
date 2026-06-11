@@ -1,27 +1,28 @@
-"""客服 Agent：Anthropic 原生 tool use 循环。
+"""客服 Agent：与厂商无关的 tool use 循环。
 
-不依赖任何 agent 框架——循环本身只有 40 行左右：
-    1. 带着 tools 调 messages.create
-    2. stop_reason == "tool_use" → 执行工具、把 tool_result 塞回 messages、继续
-    3. 其他 stop_reason → 结束本轮
+不依赖任何 agent 框架，循环本身只有约 40 行：
+    1. 带着 tools 调 client.create（具体 provider 由 llm.yaml 决定）
+    2. stop_reason == "tool_use" → 执行工具、把 tool_result 回填、继续
+    3. 其它 stop_reason → 结束本轮
 
-每条消息、每次工具调用/结果都落库 chat_logs（见 services.chat_log_service）；
-on_event 回调把过程实时推给上层（CLI 打印 / WebSocket 推送）。
+会话历史以归一化形式保存（见 llm.base.Message），由 provider 适配器翻译成各自的
+wire format，因此同一套循环可同时跑 Anthropic / OpenAI / DeepSeek。
+
+每条消息、每次工具调用/结果都落库 chat_logs；on_event 回调把过程实时推给上层
+（CLI 打印 / WebSocket 推送）。
 """
-import json
 from typing import Any, Callable
-
-import anthropic
 
 from backend.app.agent.prompt import SYSTEM_PROMPT
 from backend.app.agent.state import SessionState
-from backend.app.core.config import ANTHROPIC_MODEL, MAX_TOOL_ROUNDS
+from backend.app.core.config import MAX_TOOL_ROUNDS
+from backend.app.llm import LLMClient, Message, create_llm_client
 from backend.app.services.chat_log_service import (
     log_message,
     log_tool_result,
     log_tool_use,
 )
-from backend.app.tools import execute_tool, get_anthropic_tools
+from backend.app.tools import execute_tool, get_tool_specs
 
 # on_event(event_type, payload)
 #   event_type: "text" | "tool_use" | "tool_result" | "escalated"
@@ -31,11 +32,11 @@ EventCallback = Callable[[str, dict[str, Any]], None]
 class CSAgent:
     """一个会话一个实例。messages 历史保存在内存，落库 chat_logs 供审计。"""
 
-    def __init__(self, session_id: str):
-        self.client = anthropic.Anthropic()
+    def __init__(self, session_id: str, client: LLMClient | None = None):
+        self.client = client or create_llm_client()
         self.state = SessionState(session_id=session_id)
-        self.messages: list[dict] = []
-        self.tools = get_anthropic_tools()
+        self.messages: list[Message] = []
+        self.tools = get_tool_specs()
 
     def run(self, user_message: str, on_event: EventCallback | None = None) -> str:
         """处理一条用户消息，跑完 tool use 循环，返回最终回复文本。"""
@@ -47,56 +48,48 @@ class CSAgent:
 
         final_text = ""
         for _ in range(MAX_TOOL_ROUNDS):
-            response = self.client.messages.create(
-                model=ANTHROPIC_MODEL,
-                max_tokens=4096,
-                system=SYSTEM_PROMPT,
-                tools=self.tools,
-                messages=self.messages,
+            resp = self.client.create(
+                system=SYSTEM_PROMPT, messages=self.messages, tools=self.tools
             )
 
-            # Fable 5 的安全分类器可能拒答（HTTP 200 + stop_reason=refusal）
-            if response.stop_reason == "refusal":
+            if resp.stop_reason == "refusal":
                 final_text = "抱歉，这个问题我无法处理。如需帮助请联系人工客服。"
-                self.messages.append({"role": "assistant", "content": final_text})
+                self.messages.append({"role": "assistant", "text": final_text, "tool_calls": []})
                 log_message(sid, "assistant", final_text, {"stop_reason": "refusal"})
                 emit("text", {"text": final_text})
                 return final_text
 
-            # 助手回合（含 tool_use 块）必须原样接回历史
-            self.messages.append({"role": "assistant", "content": response.content})
-
-            text_parts = [b.text for b in response.content if b.type == "text"]
-            if text_parts:
-                final_text = "\n".join(text_parts)
+            self.messages.append(
+                {"role": "assistant", "text": resp.text, "tool_calls": resp.tool_calls}
+            )
+            if resp.text:
+                final_text = resp.text
                 log_message(sid, "assistant", final_text)
 
-            if response.stop_reason != "tool_use":
+            if resp.stop_reason != "tool_use" or not resp.tool_calls:
                 break
 
-            # 执行本回合的所有工具调用，结果合并为一条 user 消息
-            tool_results = []
-            for block in response.content:
-                if block.type != "tool_use":
-                    continue
-                emit("tool_use", {"id": block.id, "name": block.name, "input": block.input})
-                log_tool_use(sid, block.name, block.id, block.input)
+            # 执行本回合的所有工具调用，结果合并为一条 tool 消息
+            results = []
+            for call in resp.tool_calls:
+                emit("tool_use", {"id": call.id, "name": call.name, "input": call.input})
+                log_tool_use(sid, call.name, call.id, call.input)
 
-                result, is_error = execute_tool(self.state, block.name, block.input)
+                result, is_error = execute_tool(self.state, call.name, call.input)
 
                 emit("tool_result", {
-                    "tool_use_id": block.id, "name": block.name,
+                    "tool_use_id": call.id, "name": call.name,
                     "result": result, "is_error": is_error,
                 })
-                log_tool_result(sid, block.name, block.id, result, is_error)
+                log_tool_result(sid, call.name, call.id, result, is_error)
 
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
+                results.append({
+                    "tool_use_id": call.id,
+                    "name": call.name,
                     "content": result,
                     "is_error": is_error,
                 })
-            self.messages.append({"role": "user", "content": tool_results})
+            self.messages.append({"role": "tool", "results": results})
         else:
             final_text = final_text or "处理步骤过多，已停止。请换个方式描述问题或转人工。"
 
