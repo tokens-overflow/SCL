@@ -41,14 +41,14 @@ flowchart LR
 cd ai-cs-agent
 cp .env.example .env          # 填入 ANTHROPIC_API_KEY
 uv sync                       # 安装依赖
-uv run python -m backend.seed # 造数：15 用户 / 50 订单 / 退款单 / 工单
+uv run python -m backend.app.seed # 造数：15 用户 / 50 订单 / 退款单 / 工单
 ```
 
 两条命令分别启动后端和前端（两个终端）：
 
 ```bash
 # 终端 1：后端
-uv run uvicorn backend.main:app --port 8000
+uv run uvicorn backend.app.api.main:app --port 8000
 
 # 终端 2：前端
 uv run python frontend/app.py
@@ -61,8 +61,8 @@ uv run python frontend/app.py
 也可以不起前后端，直接命令行测试：
 
 ```bash
-uv run python -m backend.cli               # 交互模式
-uv run python -m backend.cli --scenario 1  # 预设场景
+uv run python -m backend.app.cli               # 交互模式
+uv run python -m backend.app.cli --scenario 1  # 预设场景
 ```
 
 ## 三个演示场景
@@ -114,7 +114,7 @@ uv run python -m backend.cli --scenario 1  # 预设场景
 | `create_refund(order_no, reason, amount)` | 创建退款单 | >¥200 不执行、自动转人工；写操作需用户确认 |
 | `escalate_to_human(summary, priority)` | 建工单并结束接待 | 未核身也可用 |
 
-每个工具的入参/出参都是 Pydantic v2 模型，JSON Schema 由 `model_json_schema()` 自动生成（见 `backend/tools.py`），入参校验失败的错误信息会回传给模型让它修正重试。
+每个工具的入参/出参都是 Pydantic v2 模型，JSON Schema 由 `model_json_schema()` 自动生成（见 `backend/app/tools/registry.py`），入参校验失败的错误信息会回传给模型让它修正重试。
 
 ## 业务护栏（双保险）
 
@@ -129,17 +129,25 @@ uv run python -m backend.cli --scenario 1  # 预设场景
 
 ## 目录结构
 
+分层架构：`api → agent → tools → services → repositories → domain`，依赖单向向下。
+
 ```
 ai-cs-agent/
 ├── backend/
-│   ├── models.py      # SQLAlchemy 2.0 数据模型（5 张表）
-│   ├── seed.py        # 造数脚本
-│   ├── schemas.py     # 8 个工具的 Pydantic 入参/出参模型
-│   ├── tools.py       # 工具注册表 + 实现（Schema 自动生成）
-│   ├── guardrails.py  # 代码硬护栏
-│   ├── agent.py       # tool use 循环（约 40 行核心逻辑）
-│   ├── cli.py         # 命令行测试
-│   └── main.py        # FastAPI：REST + WebSocket
+│   └── app/
+│       ├── core/config.py        # 配置（.env / 环境变量，含护栏阈值）
+│       ├── db/session.py         # SQLAlchemy engine + session
+│       ├── domain/
+│       │   ├── enums.py          # 业务枚举（会员/订单/退款/工单）
+│       │   ├── models.py         # SQLAlchemy 2.0 数据模型（5 张表）
+│       │   └── schemas/          # 8 个工具的 Pydantic 入参/出参模型（按域拆分）
+│       ├── repositories/         # 纯数据访问（users/orders/refunds/tickets/chat_logs）
+│       ├── services/             # 业务逻辑（identity/order/refund/ticket）+ guardrails 硬护栏
+│       ├── tools/                # 工具注册表 + 8 个工具（Schema 自动生成）
+│       ├── agent/                # tool use 循环（agent.py）+ system prompt
+│       ├── api/                  # FastAPI：main(入口) + chat(WS) + admin(REST)
+│       ├── seed.py               # 造数脚本
+│       └── cli.py                # 命令行测试
 └── frontend/
-    └── app.py         # NiceGUI：聊天页 + admin 数据面板
+    └── app.py                    # NiceGUI：聊天页 + admin 数据面板（独立进程，走 HTTP/WS）
 ```

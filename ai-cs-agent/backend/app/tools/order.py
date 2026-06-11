@@ -13,7 +13,11 @@ from backend.app.services.order_service import (
 from backend.app.tools.registry import tool
 
 
-@tool("list_orders", "List verified user's orders, optionally filtered by status.", ListOrdersInput)
+@tool(
+    "list_orders",
+    "查询已核身用户的订单列表，可按状态筛选。需要先核身。",
+    ListOrdersInput,
+)
 def list_orders(state: SessionState, p: ListOrdersInput) -> ListOrdersResult:
     session = get_session()
     try:
@@ -22,7 +26,11 @@ def list_orders(state: SessionState, p: ListOrdersInput) -> ListOrdersResult:
         session.close()
 
 
-@tool("get_order_detail", "Get one verified user's order detail.", GetOrderDetailInput)
+@tool(
+    "get_order_detail",
+    "查询单个订单的详细信息（商品、金额、状态、收货地址、退款状态等）。需要先核身。",
+    GetOrderDetailInput,
+)
 def get_order_detail(state: SessionState, p: GetOrderDetailInput) -> OrderDetailResult:
     session = get_session()
     try:

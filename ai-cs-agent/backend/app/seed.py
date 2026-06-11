@@ -1,24 +1,20 @@
 """造数脚本：15 个用户、50 个订单（覆盖各种状态）、退款单和历史工单。
 
 用法：
-    uv run python -m backend.seed
+    uv run python -m backend.app.seed
 """
 import random
 from datetime import datetime, timedelta
 
-from backend.db import engine, get_session
-from backend.models import (
-    Base,
+from backend.app.db.session import engine, get_session
+from backend.app.domain.enums import (
     MemberLevel,
-    Order,
     OrderStatus,
-    Refund,
     RefundStatus,
-    Ticket,
     TicketPriority,
     TicketStatus,
-    User,
 )
+from backend.app.domain.models import Base, Order, Refund, Ticket, User
 
 random.seed(42)  # 可复现
 
