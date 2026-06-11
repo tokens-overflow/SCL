@@ -1,0 +1,6 @@
+.env
+crm.db
+__pycache__/
+*.pyc
+.venv/
+.nicegui/
