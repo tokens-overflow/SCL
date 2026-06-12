@@ -3,6 +3,8 @@
 from backend.app.domain.schemas.identity import VerifyIdentityInput, VerifyIdentityResult
 from backend.app.domain.schemas.user import GetUserProfileInput, UserProfileResult
 from backend.app.domain.schemas.order import (
+    CancelOrderInput,
+    CancelOrderResult,
     GetOrderDetailInput,
     GetLogisticsInput,
     GetLogisticsResult,
@@ -32,6 +34,8 @@ __all__ = [
     "GetLogisticsResult",
     "UpdateShippingAddressInput",
     "UpdateShippingAddressResult",
+    "CancelOrderInput",
+    "CancelOrderResult",
     "CreateRefundInput",
     "CreateRefundResult",
     "EscalateToHumanInput",

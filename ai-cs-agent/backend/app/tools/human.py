@@ -1,5 +1,6 @@
+from sqlalchemy.orm import Session
+
 from backend.app.agent.state import SessionState
-from backend.app.db.session import get_session
 from backend.app.domain.schemas import EscalateToHumanInput, EscalateToHumanResult
 from backend.app.services.ticket_service import escalate_to_human as escalate_to_human_service
 from backend.app.tools.registry import tool
@@ -11,9 +12,5 @@ from backend.app.tools.registry import tool
     "提到投诉或法律途径、或问题超出现有工具能力。未核身用户也可以转人工。",
     EscalateToHumanInput,
 )
-def escalate_to_human(state: SessionState, p: EscalateToHumanInput) -> EscalateToHumanResult:
-    session = get_session()
-    try:
-        return escalate_to_human_service(session, state, p.summary, p.priority)
-    finally:
-        session.close()
+def escalate_to_human(session: Session, state: SessionState, p: EscalateToHumanInput) -> EscalateToHumanResult:
+    return escalate_to_human_service(session, state, p.summary, p.priority)

@@ -10,8 +10,13 @@ def get_latest_refund_for_order(session: Session, order_id: int) -> Refund | Non
     )
 
 
-def count_refunds(session: Session) -> int:
-    return len(session.scalars(select(Refund.refund_no)).all())
+def latest_refund_no(session: Session, prefix: str) -> str | None:
+    return session.scalar(
+        select(Refund.refund_no)
+        .where(Refund.refund_no.like(f"{prefix}%"))
+        .order_by(Refund.refund_no.desc())
+        .limit(1)
+    )
 
 
 def add_refund(session: Session, refund: Refund) -> Refund:

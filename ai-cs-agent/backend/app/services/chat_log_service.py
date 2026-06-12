@@ -1,16 +1,12 @@
 import json
 
-from backend.app.db.session import get_session
+from backend.app.db.session import session_scope
 from backend.app.repositories.chat_logs import add_chat_log
 
 
 def log_message(session_id: str, role: str, content: str, meta: dict | None = None) -> None:
-    db = get_session()
-    try:
+    with session_scope() as db:
         add_chat_log(db, session_id=session_id, role=role, content=content, meta=meta)
-        db.commit()
-    finally:
-        db.close()
 
 
 def log_tool_use(session_id: str, tool_name: str, tool_use_id: str, tool_input: dict) -> None:

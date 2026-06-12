@@ -52,26 +52,36 @@ def require_own_order(state: SessionState, order: Order | None, order_no: str) -
 def check_address_change_allowed(state: SessionState, order: Order) -> None:
     if order.status != OrderStatus.PENDING_SHIPMENT:
         state.triggered_guardrails.append("address_change_after_shipment")
-        status_text = {
-            OrderStatus.IN_TRANSIT: "运输中",
-            OrderStatus.DELIVERED: "已签收",
-            OrderStatus.REFUNDED: "已退款",
-        }.get(order.status, order.status.value)
         raise GuardrailViolation(
             "address_change_after_shipment",
-            f"护栏拦截：订单 {order.order_no} 当前状态为「{status_text}」，"
+            f"护栏拦截：订单 {order.order_no} 当前状态为「{order.status.label}」，"
             "已发货的订单无法修改收货地址。请向用户解释原因，并提供替代方案："
             "①联系承运商尝试拦截改派；②签收后走退换货流程；③转人工处理。",
+        )
+
+
+def check_cancel_allowed(state: SessionState, order: Order) -> None:
+    if order.status != OrderStatus.PENDING_SHIPMENT:
+        state.triggered_guardrails.append("cancel_after_shipment")
+        raise GuardrailViolation(
+            "cancel_after_shipment",
+            f"护栏拦截：订单 {order.order_no} 当前状态为「{order.status.label}」，"
+            "只有「待发货」订单可以取消。请向用户解释，并提供替代方案："
+            "已发货订单可在签收后走退款流程（create_refund），或转人工处理。",
         )
 
 
 def check_refund_basic(state: SessionState, order: Order, amount: float) -> None:
     if order.status == OrderStatus.REFUNDED:
         raise GuardrailViolation("already_refunded", f"订单 {order.order_no} 已是退款状态，无法重复退款。")
+    if order.status == OrderStatus.CANCELLED:
+        raise GuardrailViolation(
+            "order_cancelled", f"订单 {order.order_no} 已取消，款项会自动原路退回，无需再申请退款。"
+        )
     if order.status == OrderStatus.PENDING_SHIPMENT:
         raise GuardrailViolation(
             "refund_before_shipment",
-            f"订单 {order.order_no} 尚未发货。未发货订单请直接取消订单（当前 demo 未提供取消工具，请转人工处理），无需走退款流程。",
+            f"订单 {order.order_no} 尚未发货。未发货订单请引导用户取消订单（调用 cancel_order），无需走退款流程。",
         )
     if amount > order.amount:
         state.triggered_guardrails.append("refund_amount_exceeds_order")

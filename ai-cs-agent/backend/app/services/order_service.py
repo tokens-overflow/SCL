@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from backend.app.agent.state import SessionState
 from backend.app.domain.enums import OrderStatus
 from backend.app.domain.schemas import (
+    CancelOrderResult,
     GetLogisticsResult,
     ListOrdersResult,
     LogisticsEvent,
@@ -62,6 +63,8 @@ def get_logistics(session: Session, state: SessionState, order_no: str) -> GetLo
     events = [LogisticsEvent(**e) for e in (order.logistics_events or [])]
     if order.status == OrderStatus.PENDING_SHIPMENT:
         message = "订单尚未发货，暂无物流信息。"
+    elif order.status == OrderStatus.CANCELLED and not events:
+        message = "订单已取消，无物流信息。"
     else:
         message = f"共 {len(events)} 条物流记录，最新：{events[-1].description}" if events else "暂无轨迹记录。"
     return GetLogisticsResult(
@@ -84,11 +87,28 @@ def update_shipping_address(
     guardrails.check_address_change_allowed(state, order)
     old = order.shipping_address
     order.shipping_address = new_address
-    session.commit()
     return UpdateShippingAddressResult(
         success=True,
         order_no=order.order_no,
         old_address=old,
         new_address=new_address,
         message="收货地址修改成功。",
+    )
+
+
+def cancel_order(
+    session: Session,
+    state: SessionState,
+    order_no: str,
+    reason: str,  # 取消原因不落订单表，工具入参已随 chat_logs 留痕
+) -> CancelOrderResult:
+    order = guardrails.require_own_order(state, get_order_by_no(session, order_no), order_no)
+    guardrails.check_cancel_allowed(state, order)
+    order.status = OrderStatus.CANCELLED
+    return CancelOrderResult(
+        success=True,
+        order_no=order.order_no,
+        status=order.status,
+        refund_amount=order.amount,
+        message=f"订单 {order.order_no} 已取消，已支付的 ¥{order.amount:.2f} 将于 1-3 个工作日原路退回。",
     )

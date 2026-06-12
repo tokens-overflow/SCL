@@ -37,7 +37,6 @@ def escalate_to_human(
         summary=summary,
         priority=priority,
     )
-    session.commit()
     state.escalated = True
     return EscalateToHumanResult(
         ticket_no=ticket.ticket_no,

@@ -1,6 +1,7 @@
+from sqlalchemy.orm import Session
+
 from backend.app.agent.state import SessionState
 from backend.app.core.config import REFUND_AUTO_ESCALATE_THRESHOLD
-from backend.app.db.session import get_session
 from backend.app.domain.schemas import CreateRefundInput, CreateRefundResult
 from backend.app.services.refund_service import create_refund as create_refund_service
 from backend.app.tools.registry import tool
@@ -13,9 +14,5 @@ from backend.app.tools.registry import tool
     "系统会自动创建人工工单（返回 status=escalated）。需要先核身。",
     CreateRefundInput,
 )
-def create_refund(state: SessionState, p: CreateRefundInput) -> CreateRefundResult:
-    session = get_session()
-    try:
-        return create_refund_service(session, state, p.order_no, p.reason, p.amount)
-    finally:
-        session.close()
+def create_refund(session: Session, state: SessionState, p: CreateRefundInput) -> CreateRefundResult:
+    return create_refund_service(session, state, p.order_no, p.reason, p.amount)

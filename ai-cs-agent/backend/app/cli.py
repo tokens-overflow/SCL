@@ -7,6 +7,7 @@
     uv run python -m backend.app.cli --scenario 1   # 查物流
     uv run python -m backend.app.cli --scenario 2   # 小额退款成功
     uv run python -m backend.app.cli --scenario 3   # 大额退款触发护栏转人工
+    uv run python -m backend.app.cli --scenario 4   # 取消未发货订单
 """
 import argparse
 import sys
@@ -48,6 +49,11 @@ SCENARIOS = {
         "13800000014",
         "退已签收里最贵的那单，全额退款",
         "确认，就退这个",
+    ],
+    "4": [
+        "我下错单了，帮我取消那个还没发货的订单",
+        "13800000009",
+        "对，就是这个，取消吧",
     ],
 }
 
