@@ -11,7 +11,7 @@ class ListOrdersInput(BaseModel):
         default=None,
         description=(
             "可选，按状态筛选：pending_shipment 待发货 / in_transit 运输中 / "
-            "delivered 已签收 / refunded 已退款"
+            "delivered 已签收 / refunded 已退款 / cancelled 已取消"
         ),
     )
 
@@ -65,6 +65,19 @@ class GetLogisticsResult(BaseModel):
     carrier: str | None
     tracking_no: str | None
     events: list[LogisticsEvent]
+    message: str
+
+
+class CancelOrderInput(BaseModel):
+    order_no: str = Field(description="订单号，形如 ORD2026060001")
+    reason: str = Field(description="取消原因", min_length=2)
+
+
+class CancelOrderResult(BaseModel):
+    success: bool
+    order_no: str
+    status: OrderStatus
+    refund_amount: float = Field(description="将原路退回的已支付金额（元）")
     message: str
 
 

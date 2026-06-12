@@ -75,7 +75,7 @@ TICKET_SAMPLES = [
 
 def make_logistics_events(status: OrderStatus, created: datetime) -> list[dict] | None:
     """根据订单状态生成物流轨迹。"""
-    if status == OrderStatus.PENDING_SHIPMENT:
+    if status in (OrderStatus.PENDING_SHIPMENT, OrderStatus.CANCELLED):
         return None
     city = random.choice(CITIES).split("市")[0] + "市"
     events = [
@@ -112,12 +112,13 @@ def seed() -> None:
     session.flush()  # 拿到 user.id
 
     # ---- 订单：50 单，覆盖各状态 ----
-    # 状态分布：待发货 12 / 运输中 14 / 已签收 18 / 已退款 6
+    # 状态分布：待发货 12 / 运输中 13 / 已签收 17 / 已退款 6 / 已取消 2
     status_pool = (
         [OrderStatus.PENDING_SHIPMENT] * 12
-        + [OrderStatus.IN_TRANSIT] * 14
-        + [OrderStatus.DELIVERED] * 18
+        + [OrderStatus.IN_TRANSIT] * 13
+        + [OrderStatus.DELIVERED] * 17
         + [OrderStatus.REFUNDED] * 6
+        + [OrderStatus.CANCELLED] * 2
     )
     random.shuffle(status_pool)
 
@@ -127,7 +128,7 @@ def seed() -> None:
         product, price = random.choice(PRODUCTS)
         qty = random.choice([1, 1, 1, 2])
         created = now - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23))
-        shipped = status != OrderStatus.PENDING_SHIPMENT
+        shipped = status not in (OrderStatus.PENDING_SHIPMENT, OrderStatus.CANCELLED)
         order = Order(
             order_no=f"ORD{now:%Y%m}{i:04d}",
             user_id=user.id,

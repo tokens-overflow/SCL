@@ -30,7 +30,6 @@ def create_refund(
             summary=f"大额退款申请需审核：订单 {order_no}，金额 ¥{amount:.2f}，原因：{reason}",
             priority="high",
         )
-        session.commit()
         state.escalated = True
         return CreateRefundResult(
             status="escalated",
@@ -51,7 +50,6 @@ def create_refund(
     )
     order.status = OrderStatus.REFUNDED
     add_refund(session, refund)
-    session.commit()
     return CreateRefundResult(
         status="created",
         refund_no=refund.refund_no,

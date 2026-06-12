@@ -2,8 +2,10 @@ from dataclasses import dataclass
 from typing import Any, Callable, Type
 
 from pydantic import BaseModel, ValidationError
+from sqlalchemy.orm import Session
 
 from backend.app.agent.state import SessionState
+from backend.app.db.session import session_scope
 from backend.app.services.guardrails import GuardrailViolation
 
 
@@ -12,7 +14,7 @@ class ToolDef:
     name: str
     description: str
     input_model: Type[BaseModel]
-    handler: Callable[[SessionState, BaseModel], BaseModel]
+    handler: Callable[[Session, SessionState, BaseModel], BaseModel]
 
 
 TOOL_REGISTRY: dict[str, ToolDef] = {}
@@ -47,6 +49,12 @@ def get_anthropic_tools() -> list[dict[str, Any]]:
 
 
 def execute_tool(state: SessionState, name: str, raw_input: dict) -> tuple[str, bool]:
+    """工具执行漏斗：入参校验 → 事务内执行 → 出参序列化。
+
+    数据库 session 与事务边界在这里统一管理：handler 正常返回则 commit，
+    抛异常（含护栏拦截）则 rollback——半截写入不会落库。
+    三类失败原样回传给模型自我修正：未知工具 / 入参校验失败 / 护栏拦截。
+    """
     tool_def = TOOL_REGISTRY.get(name)
     if tool_def is None:
         return f"unknown tool: {name}", True
@@ -55,7 +63,8 @@ def execute_tool(state: SessionState, name: str, raw_input: dict) -> tuple[str, 
     except ValidationError as e:
         return f"input validation failed: {e}", True
     try:
-        result = tool_def.handler(state, params)
+        with session_scope() as session:
+            result = tool_def.handler(session, state, params)
         return result.model_dump_json(), False
     except GuardrailViolation as e:
         return str(e), True

@@ -1,6 +1,6 @@
 # AI 客服 Agent + CRM Demo
 
-> 一个能真正"办事"的电商客服 Agent：用 Anthropic 原生 tool use 循环直接操作 CRM 数据库——查订单、查物流、改地址、退款、转人工，全程带业务护栏（prompt 软约束 + 代码硬校验，双保险）。
+> 一个能真正"办事"的电商客服 Agent：用 Anthropic 原生 tool use 循环直接操作 CRM 数据库——查订单、查物流、改地址、取消订单、退款、转人工，全程带业务护栏（prompt 软约束 + 代码硬校验，双保险）。
 
 **不用任何 Agent 框架**（不用 LangChain / LlamaIndex），核心循环只有约 40 行，借此把"工具调用智能体"是怎么跑起来的讲清楚；同时用一套分层后端演示了把 LLM Agent 落到真实业务系统里该有的工程结构。
 
@@ -12,6 +12,8 @@
 - **Pydantic 即契约**：工具的 JSON Schema 由入参模型 `model_json_schema()` 自动生成，入参校验失败的报错原样回传给模型自我修正。
 - **过程可视化**：前端右侧实时流式展示每一次工具调用的入参与返回，演示效果直观。
 - **清晰的分层架构**：`api → agent → tools → services → repositories → domain`，依赖单向向下，便于阅读和扩展。
+- **事务边界收口**：数据库 session 与 commit/rollback 统一由工具执行器管理，service 层只写业务逻辑；护栏拦截即整体回滚，不留半截写入。
+- **带单测**：护栏、注册表、service、单号生成共 37 个 pytest 用例，不依赖 API Key 即可跑。
 
 ## 技术栈
 
@@ -39,7 +41,7 @@ flowchart LR
         REST["REST /api/sessions<br/>/api/admin/{table}"]
         Agent["CSAgent<br/>tool use 循环"]
         Guard["Guardrails<br/>代码硬校验"]
-        Tools["8 个工具<br/>Pydantic 入参/出参"]
+        Tools["9 个工具<br/>Pydantic 入参/出参"]
     end
 
     DB[("SQLite CRM<br/>users / orders / refunds<br/>tickets / chat_logs")]
@@ -89,8 +91,16 @@ uv run python frontend/app.py
 
 ```bash
 uv run python -m backend.app.cli               # 交互模式
-uv run python -m backend.app.cli --scenario 1  # 跑预设演示场景（1/2/3）
+uv run python -m backend.app.cli --scenario 1  # 跑预设演示场景（1/2/3/4）
 ```
+
+### 跑单测（不需要 API Key）
+
+```bash
+uv run pytest
+```
+
+覆盖护栏规则、工具注册表（Schema 生成 / 入参校验 / 错误回传）、service 业务逻辑、单号生成，跑在独立的临时数据库上，不会动 `crm.db`。
 
 ## 配置
 
@@ -107,7 +117,7 @@ uv run python -m backend.app.cli --scenario 1  # 跑预设演示场景（1/2/3�
 
 > 默认模型 `claude-fable-5` 要求组织开启 30 天数据保留；若你的组织是零保留（ZDR）配置，请改用 `ANTHROPIC_MODEL=claude-opus-4-8`。
 
-## 三个演示场景
+## 四个演示场景
 
 演示用户：手机号 `13800000001` ~ `13800000015`（见 seed 数据，admin 页 users 表可查）。
 
@@ -143,6 +153,16 @@ uv run python -m backend.app.cli --scenario 1  # 跑预设演示场景（1/2/3�
 
 看点：即使模型"想"执行退款，代码层也不会执行——工单是 `create_refund` 内部直接创建的，**不依赖模型自觉调用** `escalate_to_human`。admin 页 `tickets` 表可见新工单，`refunds` 表没有新增。
 
+### 场景 4 · 取消未发货订单（写操作 + 状态门禁）
+
+| 你说 | 预期 |
+|---|---|
+| 我下错单了，帮我取消那个还没发货的订单 | 要求核身 |
+| 13800000009 | 核身成功，找到待发货订单并复述确认 |
+| 对，就是这个，取消吧 | 调 `cancel_order`，订单状态变为 `cancelled`，告知退款将原路退回 |
+
+看点：取消和退款是两条不同的链路——未发货走 `cancel_order`，已发货走 `create_refund`；对已发货订单调 `cancel_order` 会被护栏拦截并引导改走退款流程。
+
 ## tool use 循环：一条消息是怎么跑起来的
 
 核心逻辑在 `backend/app/agent/agent.py`（`CSAgent.run`）：
@@ -155,9 +175,9 @@ uv run python -m backend.app.cli --scenario 1  # 跑预设演示场景（1/2/3�
    - `stop_reason == "tool_use"` → 逐个执行工具，把 `tool_result` 合并成一条 user 消息回填，**继续循环**让模型据此决定下一步；
    - 其它 `stop_reason` → 收尾返回最终文本；
    - `stop_reason == "refusal"`（Fable 安全分类器拒答）→ 返回兜底文案。
-5. 工具执行器 `execute_tool`（`tools/registry.py`）是一道"漏斗"：Pydantic 校验入参 → 调 handler → 出参 `model_dump_json`。失败分三类原样回传给模型（未知工具 / 入参校验失败 / 护栏拦截 `GuardrailViolation`），模型据此向用户解释或自我修正重试。
+5. 工具执行器 `execute_tool`（`tools/registry.py`）是一道"漏斗"：Pydantic 校验入参 → 开数据库事务调 handler（正常 commit，异常 rollback）→ 出参 `model_dump_json`。失败分三类原样回传给模型（未知工具 / 入参校验失败 / 护栏拦截 `GuardrailViolation`），模型据此向用户解释或自我修正重试。
 
-## 8 个工具
+## 9 个工具
 
 | 工具 | 说明 | 护栏 |
 |---|---|---|
@@ -167,10 +187,11 @@ uv run python -m backend.app.cli --scenario 1  # 跑预设演示场景（1/2/3�
 | `get_order_detail(order_no)` | 订单详情 | 需核身；仅限本人订单 |
 | `get_logistics(order_no)` | 物流轨迹 | 需核身；仅限本人订单 |
 | `update_shipping_address(order_no, new_address)` | 改收货地址 | 仅限待发货；写操作需用户确认 |
+| `cancel_order(order_no, reason)` | 取消订单、款项原路退回 | 仅限待发货；写操作需用户确认 |
 | `create_refund(order_no, reason, amount)` | 创建退款单 | >¥200 不执行、自动转人工；写操作需用户确认 |
 | `escalate_to_human(summary, priority)` | 建工单并结束接待 | 未核身也可用 |
 
-每个工具的入参/出参都是 Pydantic v2 模型，JSON Schema 由 `model_json_schema()` 自动生成（注册逻辑见 `backend/app/tools/registry.py`，入参/出参模型见 `backend/app/domain/schemas/`）。
+每个工具的入参/出参都是 Pydantic v2 模型，JSON Schema 由 `model_json_schema()` 自动生成（注册逻辑见 `backend/app/tools/registry.py`，入参/出参模型见 `backend/app/domain/schemas/`）。工具函数本身是薄包装：session 由 `execute_tool` 注入并管理事务，handler 只是把入参拆给 service。
 
 ## 业务护栏（双保险）
 
@@ -179,6 +200,7 @@ uv run python -m backend.app.cli --scenario 1  # 跑预设演示场景（1/2/3�
 | 未核身禁止查询 | ✅ | ✅ `require_verified` |
 | 禁止跨用户访问 | ✅ | ✅ `require_own_user` / `require_own_order` |
 | 已发货禁改地址 | ✅（解释 + 替代方案） | ✅ `check_address_change_allowed` |
+| 已发货禁取消订单 | ✅（引导走退款） | ✅ `check_cancel_allowed` |
 | 退款 >¥200 转人工 | ✅ | ✅ 代码直接建工单，不执行退款 |
 | 投诉/法律字眼升级 | ✅（prompt 判断语义） | —（语义判断只能靠模型） |
 | 写操作二次确认 | ✅ | —（对话层行为） |
@@ -194,18 +216,19 @@ ai-cs-agent/
 ├── backend/
 │   └── app/
 │       ├── core/config.py        # 配置（.env / 环境变量，含护栏阈值）
-│       ├── db/session.py         # SQLAlchemy engine + session
+│       ├── db/session.py         # SQLAlchemy engine + session_scope 事务边界
 │       ├── domain/
 │       │   ├── enums.py          # 业务枚举（会员/订单/退款/工单）
 │       │   ├── models.py         # SQLAlchemy 2.0 数据模型（5 张表）
-│       │   └── schemas/          # 8 个工具的 Pydantic 入参/出参模型（按域拆分）
+│       │   └── schemas/          # 9 个工具的 Pydantic 入参/出参模型（按域拆分）
 │       ├── repositories/         # 纯数据访问（users/orders/refunds/tickets/chat_logs）
 │       ├── services/             # 业务逻辑（identity/order/refund/ticket）+ guardrails 硬护栏
-│       ├── tools/                # 工具注册表 + 8 个工具（Schema 自动生成）
+│       ├── tools/                # 工具注册表（执行漏斗 + 事务管理）+ 9 个工具
 │       ├── agent/                # tool use 循环（agent.py）+ system prompt（prompt.py）
 │       ├── api/                  # FastAPI：main(入口) + chat(WS) + admin(REST)
 │       ├── seed.py               # 造数脚本
 │       └── cli.py                # 命令行测试
+├── tests/                        # pytest：护栏 / 注册表 / service / 单号生成
 └── frontend/
     └── app.py                    # NiceGUI：聊天页 + admin 数据面板（独立进程，走 HTTP/WS）
 ```
@@ -214,8 +237,8 @@ ai-cs-agent/
 
 - **domain**：枚举、ORM 模型、工具 I/O schema，无业务逻辑。
 - **repositories**：纯数据访问，输入 `Session` 返回 ORM 对象，不含规则判断。
-- **services**：业务逻辑与硬护栏，是规则的唯一来源。
-- **tools**：把 service 包装成 Anthropic 工具，负责会话级 `Session` 生命周期。
+- **services**：业务逻辑与硬护栏，是规则的唯一来源；不碰 session 生命周期、不 commit。
+- **tools**：把 service 包装成 Anthropic 工具；`execute_tool` 统一管理每次调用的 `Session` 与事务（成功 commit / 异常 rollback）。
 - **agent**：tool use 循环与 system prompt。
 - **api**：FastAPI 入口与路由（会话/WebSocket/admin）。
 
@@ -226,7 +249,7 @@ ai-cs-agent/
 - **会话在内存**：`CSAgent` 实例存进程内存（`api/chat.py` 的 `AGENTS` dict），后端重启即丢失会话历史（`chat_logs` 仍落库）。
 - **无鉴权**：核身只是业务流程示意，admin 接口与 WebSocket 都没有身份认证，仅供本地演示。
 - **SQLite 单文件**：默认 `crm.db`；WebSocket 多线程访问已开 `check_same_thread=False`，但并发能力有限。
-- **单号按行数生成**：退款/工单号用"计数 + 1"生成（`services/numbers.py`），非并发安全、跨月可能重号，仅够演示。
+- **单号非并发安全**：退款/工单号按"当月最大序号 + 1"生成（`services/numbers.py`），跨月自动重新计数，但并发下仍可能撞号，仅够演示。
 - **同步 SDK + 线程池**：用同步 Anthropic 客户端，靠 `asyncio.to_thread` 不阻塞事件循环；非全异步实现。
 
-生产化方向（留作扩展）：会话/状态外置（Redis/DB）、接入鉴权、单号用数据库序列或雪花 ID、换 PostgreSQL、流式输出 token 级、为工具与护栏补单测。
+生产化方向（留作扩展）：会话/状态外置（Redis/DB）、接入鉴权、单号用数据库序列或雪花 ID、换 PostgreSQL、流式输出 token 级、用多轮对话回归集做端到端评测。
