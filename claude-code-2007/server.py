@@ -133,8 +133,9 @@ class TaskManager:
 
     # ---------- 进程 ----------
     def _spawn(self, task, resume):
+        exe = shutil.which(CLAUDE_BIN) or CLAUDE_BIN
         args = [
-            CLAUDE_BIN, "-p",
+            exe, "-p",
             "--input-format", "stream-json",
             "--output-format", "stream-json",
             "--include-partial-messages",
@@ -147,6 +148,9 @@ class TaskManager:
             args += ["--permission-mode", mode]
         if resume and task.get("session_id"):
             args += ["--resume", task["session_id"]]
+        # Windows: npm 装的 claude 是 .cmd 批处理,CreateProcess 无法直接执行
+        if os.name == "nt" and exe.lower().endswith((".cmd", ".bat")):
+            args = ["cmd", "/c"] + args
         proc = subprocess.Popen(
             args,
             cwd=task["cwd"],
@@ -154,6 +158,8 @@ class TaskManager:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",   # 中文 Windows 默认 GBK,必须显式 UTF-8
+            errors="replace",
             bufsize=1,
         )
         self.procs[task["id"]] = proc
@@ -252,7 +258,14 @@ class TaskManager:
                 task["status"] = "idle"
                 self._save()
         if proc and proc.poll() is None:
-            proc.terminate()
+            if os.name == "nt":
+                # 结束整棵进程树(cmd 包装层 + claude 本体)
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    capture_output=True,
+                )
+            else:
+                proc.terminate()
         return task
 
 

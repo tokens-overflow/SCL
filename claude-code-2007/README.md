@@ -19,12 +19,19 @@ QQ 2007 经典皮肤的 **Claude Code 图形界面**——给原生 `claude` CLI
 ## 使用
 
 前提:本机已安装并登录 [Claude Code](https://claude.com/claude-code) CLI,且有 Python 3。
+macOS 和 Windows 均支持(Linux 自然也行)。
+
+**macOS**:双击 `启动.command`(首次若被拦截,右键→打开;或先
+`chmod +x 启动.command`),会自动开服务并打开浏览器。或者手动:
 
 ```bash
 cd claude-code-2007
-python3 server.py          # 默认端口 8787
-# 打开 http://localhost:8787
+python3 server.py          # 默认端口 8787,打开 http://localhost:8787
 ```
+
+**Windows**:双击 `启动.bat`(需已安装 [Python 3](https://python.org),
+`python` 或 `py` 在 PATH 里)。npm 安装的 `claude.cmd` 和原生安装的
+`claude.exe` 都能识别;输出统一按 UTF-8 处理,中文系统不会乱码。
 
 1. 点「新建任务」:选项目目录、模型、权限模式,输入指令,确定。
 2. 中栏实时看 Claude 流式输出、工具调用(点击可展开输出)、本轮耗时/花费。
