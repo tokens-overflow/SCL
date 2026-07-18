@@ -1,0 +1,11 @@
+{
+  "user_name": "Asta",
+  "default_model": "sonnet",
+  "default_permission_mode": "acceptEdits",
+  "models": ["sonnet", "opus", "haiku"],
+  "projects": [
+    { "name": "scl", "path": "~/workspace/scl", "pinned": true },
+    { "name": "personal", "path": "~/workspace/personal", "pinned": true },
+    { "name": "当前目录", "path": ".", "pinned": false }
+  ]
+}
