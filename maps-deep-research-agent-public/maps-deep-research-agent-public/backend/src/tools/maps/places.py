@@ -50,6 +50,13 @@ def _normalise_place(raw: dict[str, Any]) -> Place | None:
     opening = (raw.get("regularOpeningHours") or {}).get("weekdayDescriptions") or []
     photos = raw.get("photos") or []
     photo_ref = photos[0].get("name") if photos else None
+    editorial = (raw.get("editorialSummary") or {}).get("text") or None
+    # 取前 3 条评价正文，压平换行并截断，喂给 LLM 当"为什么推荐"的定性素材
+    reviews: list[str] = []
+    for rv in (raw.get("reviews") or [])[:3]:
+        text = " ".join(((rv.get("text") or {}).get("text") or "").split())
+        if text:
+            reviews.append(text[:220])
     return Place(
         place_id=raw.get("id") or raw.get("place_id") or "",
         name=name or "未命名地点",
@@ -65,7 +72,22 @@ def _normalise_place(raw: dict[str, Any]) -> Place | None:
         phone=raw.get("nationalPhoneNumber"),
         photo_reference=photo_ref,
         google_maps_url=raw.get("googleMapsUri"),
+        editorial_summary=editorial,
+        reviews=reviews,
     )
+
+
+def _quality_score(place: Place) -> float:
+    """综合评分：评分 × log(1+评论数)，让"高分且多人验证"的店排在前面。
+
+    无评分的地点给一个很低的分，排到最后但不丢弃。
+    """
+    import math
+
+    if place.rating is None:
+        return -1.0
+    reviews = place.user_ratings_total or 0
+    return float(place.rating) * math.log1p(reviews)
 
 
 def _format_places_as_text(places: list[Place]) -> str:
@@ -76,14 +98,22 @@ def _format_places_as_text(places: list[Place]) -> str:
     for idx, place in enumerate(places, start=1):
         rating = f"{place.rating}⭐" if place.rating else "无评分"
         reviews = f"({place.user_ratings_total} 评价)" if place.user_ratings_total else ""
-        price = f" 价位{'$' * place.price_level}" if place.price_level else ""
-        opening = (place.opening_hours[0] if place.opening_hours else "") or ""
-        lines.append(
-            f"{idx}. **{place.name}** — {rating} {reviews}{price}\n"
-            f"   地址: {place.address}\n"
-            f"   坐标: ({place.lat:.5f},{place.lng:.5f}) {opening}\n"
-            f"   链接: {place.google_maps_url or '-'}"
-        )
+        price = f" 价位{'¥' * place.price_level}" if place.price_level else ""
+        block = [
+            f"{idx}. **{place.name}** — {rating} {reviews}{price}",
+            f"   地址: {place.address}",
+            f"   坐标: ({place.lat:.5f},{place.lng:.5f})  链接: {place.google_maps_url or '-'}",
+        ]
+        if place.editorial_summary:
+            block.append(f"   简介: {place.editorial_summary}")
+        if place.opening_hours:
+            # 完整每周营业时间，供下游判断"那天/那个点关不关门"
+            block.append("   营业时间: " + " | ".join(place.opening_hours))
+        if place.phone or place.website:
+            block.append(f"   联系: {place.phone or ''} {place.website or ''}".rstrip())
+        if place.reviews:
+            block.append("   真实评价: " + " ‖ ".join(f"“{r}”" for r in place.reviews))
+        lines.append("\n".join(block))
     return "\n".join(lines)
 
 
@@ -138,6 +168,10 @@ class PlacesTool(Tool):
             place = _normalise_place(entry)
             if place is not None:
                 places.append(place)
+
+        # 按质量分（评分 × log(1+评论数)）降序，让最值得推荐的店排在最前，
+        # 下游摘要 / 报告 / 地图编号都受益于这个顺序。
+        places.sort(key=_quality_score, reverse=True)
 
         duration_ms = int((time.perf_counter() - start) * 1000)
         return ToolResult(

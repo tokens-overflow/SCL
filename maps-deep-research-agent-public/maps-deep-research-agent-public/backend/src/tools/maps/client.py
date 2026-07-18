@@ -42,7 +42,10 @@ PLACE_FIELD_MASK = (
     "places.id,places.displayName,places.formattedAddress,places.location,"
     "places.rating,places.userRatingCount,places.priceLevel,places.types,"
     "places.regularOpeningHours,places.websiteUri,places.nationalPhoneNumber,"
-    "places.googleMapsUri,places.photos"
+    "places.googleMapsUri,places.photos,"
+    # ↓ 让 LLM 拿到真实定性材料（一句话简介 + 评价正文），写出"为什么推荐"
+    "places.editorialSummary,places.reviews.text,places.reviews.rating,"
+    "places.reviews.relativePublishTimeDescription"
 )
 
 

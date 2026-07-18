@@ -8,11 +8,37 @@ import time
 from typing import Callable
 
 from ..core.events import EventEmitter
-from ..llm_tasks.itinerary_task import ItineraryInput, ItineraryTask
+from ..llm_tasks.itinerary_task import (
+    ItineraryInput,
+    ItineraryTask,
+    _evidence_for_itinerary,
+    _map_overview,
+)
 from ..llm_tasks.report_task import ReportInput, ReportTask
 from ..models import ReportEvent, ResearchState, StatusEvent, UsageEvent, UsageSnapshot
+from ..tools.weather import fetch_weather
 
 logger = logging.getLogger(__name__)
+
+
+def _trip_context(state: ResearchState) -> str:
+    """把出行日期 / 预算拼成一行给 LLM 的上下文（都为空则返回空串）。"""
+    parts: list[str] = []
+    if state.travel_date:
+        parts.append(f"出行日期/时间：{state.travel_date}")
+    if state.budget:
+        parts.append(f"预算：{state.budget}")
+    return "；".join(parts)
+
+
+async def _weather_for_state(state: ResearchState) -> str:
+    """取所有地点的几何中心作为锚点，拉一段近期天气预报（失败返回空串）。"""
+    _text, places = _evidence_for_itinerary(state.tasks)
+    overview = _map_overview(places)
+    center = overview.get("center") if overview else None
+    if not center:
+        return ""
+    return await fetch_weather(center["lat"], center["lng"])
 
 
 class ComposeStage:
@@ -33,14 +59,20 @@ class ComposeStage:
         self._usage_snapshot = usage_snapshot
 
     async def run(self, state: ResearchState, emit: EventEmitter) -> None:
-        emit(StatusEvent(message="生成最终报告..."))
+        emit(StatusEvent(message="查天气、生成最终报告与行程..."))
+
+        # 天气只拉一次，报告与行程共用；出行日期/预算上下文同理
+        weather = await _weather_for_state(state)
+        trip_context = _trip_context(state)
 
         # ── 两个 LLM 调用输入互不相关，可以并行 ──
         report_coro = self._report.run(ReportInput(
             topic=state.topic,
             tasks=state.tasks,
+            weather=weather,
+            trip_context=trip_context,
         ))
-        itinerary_coro = self._safe_itinerary(state)
+        itinerary_coro = self._safe_itinerary(state, weather, trip_context)
         state.report_markdown, (state.itinerary, state.map_overview) = await asyncio.gather(
             report_coro, itinerary_coro
         )
@@ -61,7 +93,7 @@ class ComposeStage:
             elapsed_seconds=(state.finished_at or time.time()) - state.started_at,
         ))
 
-    async def _safe_itinerary(self, state: ResearchState):
+    async def _safe_itinerary(self, state: ResearchState, weather: str, trip_context: str):
         """Itinerary 走 JSON 模式，LLM 偶尔会返回非法 JSON。
 
         失败时不能拖垮整份报告 —— 兜底成空 days + 仅从证据算出的地图概览。
@@ -70,9 +102,10 @@ class ComposeStage:
             return await self._itinerary.run(ItineraryInput(
                 topic=state.topic,
                 tasks=state.tasks,
+                weather=weather,
+                trip_context=trip_context,
             ))
         except Exception:
             logger.exception("行程生成失败，使用空 days 兜底")
-            from ..llm_tasks.itinerary_task import _evidence_for_itinerary, _map_overview
             _, places = _evidence_for_itinerary(state.tasks)
             return [], _map_overview(places)

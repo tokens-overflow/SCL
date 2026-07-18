@@ -1,122 +1,357 @@
+/* ============================================================
+   卧游 Cartograph — design system (山水 / ink-wash · travel)
+   Paper ground · distant ink mountains · cinnabar seal accent
+   ============================================================ */
+
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Microsoft YaHei", sans-serif;
+  /* fonts */
+  --font-brush: "Ma Shan Zheng", "Noto Serif SC", serif;          /* 书法标题 */
+  --font-display: "Cormorant Garamond", "Noto Serif SC", serif;    /* 拉丁衬线 */
+  --font-serif: "Noto Serif SC", "Songti SC", "SimSun", serif;     /* 正文宋体 */
+  --font-sans: var(--font-serif);
+  --font-mono: "Noto Sans Mono", ui-monospace, monospace;
+
+  /* paper surfaces — warm rice paper 宣纸 */
+  --bg-0: #e9dec6;        /* deepest ground */
+  --bg-1: #f3ecdb;        /* panel */
+  --bg-2: #f8f2e4;        /* raised */
+  --bg-3: #fdfaf1;        /* highest / hover */
+  --panel: rgba(248, 242, 228, 0.82);
+  --panel-solid: #f5efe1;
+
+  /* ink lines 墨线 */
+  --line: #d9cdb1;
+  --line-soft: #e4dac3;
+  --line-strong: #c2b48f;
+
+  /* ink text 墨色 */
+  --text-hi: #2a261d;     /* 浓墨 */
+  --text-mid: #6a6149;    /* 中墨 */
+  --text-lo: #9c9173;     /* 淡墨 */
+
+  /* accent — cinnabar / seal red 朱砂·印泥 */
+  --accent: #b23a2e;
+  --accent-2: #c75b3e;    /* 赭石 warm */
+  --accent-dim: #c9a89a;
+  --accent-ghost: rgba(178, 58, 46, 0.1);
+  --accent-glow: rgba(178, 58, 46, 0.22);
+
+  /* landscape secondaries */
+  --jade: #5e7d6a;        /* 青绿 */
+  --mist: #8298a0;        /* 远山黛 */
+
+  /* signals (kept on theme) */
+  --ok: #5e7d6a;
+  --info: #5a7d92;
+  --warn: #c08a2e;
+  --err: #b23a2e;
+  --run: #5a7d92;
+
+  --radius: 10px;
+  --radius-sm: 7px;
+  --radius-xs: 4px;
+
+  --shadow-1: 0 1px 0 rgba(255, 253, 247, 0.5) inset,
+    0 14px 30px -20px rgba(58, 46, 30, 0.45);
+  --shadow-glow: 0 0 0 1px rgba(178, 58, 46, 0.3),
+    0 6px 22px -10px var(--accent-glow);
+
   color-scheme: light;
-  color: #1f2933;
-  background-color: #f4f6fa;
+  font-family: var(--font-serif);
+  color: var(--text-hi);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
   box-sizing: border-box;
 }
 
-body,
 html,
+body,
 #app {
   margin: 0;
   padding: 0;
-  min-height: 100vh;
+  height: 100%;
 }
 
-#app {
-  display: flex;
-  flex-direction: column;
+body {
+  background-color: var(--bg-0);
+  /* warm mist washes over the rice paper */
+  background-image: radial-gradient(
+      1100px 620px at 82% -6%,
+      rgba(255, 253, 245, 0.7),
+      transparent 60%
+    ),
+    radial-gradient(900px 700px at 8% 0%, rgba(255, 251, 240, 0.55), transparent 55%);
+  background-attachment: fixed;
+  overflow: hidden;
+}
+
+/* layer 1 — distant ink mountains along the foot of the page */
+body::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 46vh;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-repeat: no-repeat;
+  background-position: bottom center;
+  background-size: 140% auto;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1440' height='420' viewBox='0 0 1440 420' preserveAspectRatio='xMidYMax meet'%3E%3Cg fill='%236a6149'%3E%3Cpath fill-opacity='0.18' d='M0 320 C160 230 250 190 360 210 C470 230 520 300 640 280 C760 260 820 170 960 200 C1100 230 1180 300 1300 270 C1370 252 1410 250 1440 258 L1440 420 L0 420 Z'/%3E%3Cpath fill-opacity='0.26' d='M0 360 C120 300 220 250 340 280 C470 312 560 360 700 340 C840 320 900 270 1040 300 C1180 330 1300 360 1440 340 L1440 420 L0 420 Z'/%3E%3Cpath fill-opacity='0.4' d='M0 392 C180 360 300 340 460 360 C620 380 720 396 880 384 C1040 372 1180 360 1440 384 L1440 420 L0 420 Z'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* layer 2 — faint paper grain */
+#app::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
 
 button {
   font: inherit;
   cursor: pointer;
+  color: inherit;
 }
 
-a {
-  color: #2563eb;
-  text-decoration: none;
+/* ---- scrollbars ---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
-a:hover {
-  text-decoration: underline;
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--mist);
+  background-clip: content-box;
 }
 
-.app-shell {
-  display: grid;
-  grid-template-columns: 360px 1fr;
-  grid-template-rows: auto 1fr;
-  gap: 16px;
-  padding: 16px;
-  min-height: 100vh;
-}
+/* ============================================================
+   shared atoms
+   ============================================================ */
 
-.app-shell__header {
-  grid-column: 1 / -1;
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--text-lo);
+  margin: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  background: #ffffff;
-  padding: 14px 20px;
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  gap: 9px;
+}
+.eyebrow::before {
+  content: "";
+  width: 16px;
+  height: 1px;
+  background: var(--accent);
 }
 
-.app-shell__sidebar,
-.app-shell__main {
-  background: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
-  padding: 16px;
-  min-height: 200px;
-  overflow: auto;
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
-.app-shell__main {
-  display: grid;
-  grid-template-rows: 320px auto 1fr;
-  gap: 16px;
+.panel {
+  position: relative;
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
 }
 
-.panel-title {
-  font-size: 0.85rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #64748b;
-  margin: 0 0 8px;
-}
-
-.task-card {
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  background: #f8fafc;
-}
-
-.task-card.status-in_progress {
-  border-color: #2563eb;
-}
-.task-card.status-completed {
-  border-color: #16a34a;
-}
-.task-card.status-failed {
-  border-color: #dc2626;
-}
-.task-card.status-skipped {
-  opacity: 0.7;
-}
-
-.tag {
-  display: inline-block;
-  font-size: 0.7rem;
+/* tag / chip */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.03em;
   padding: 2px 8px;
   border-radius: 999px;
-  background: #e0e7ff;
-  color: #3730a3;
-  margin-left: 6px;
+  border: 1px solid var(--line-strong);
+  color: var(--text-mid);
+  background: rgba(255, 253, 247, 0.4);
+  white-space: nowrap;
+}
+.chip--accent {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: var(--accent-ghost);
 }
 
-.report-content {
-  font-size: 0.95rem;
-  line-height: 1.6;
+/* status dot */
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--text-lo);
 }
-.report-content h1,
-.report-content h2 {
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 6px;
+.dot--ok { background: var(--ok); }
+.dot--run { background: var(--run); animation: pulse 1.2s ease-in-out infinite; }
+.dot--err { background: var(--err); }
+.dot--warn { background: var(--warn); }
+
+/* buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-2);
+  color: var(--text-hi);
+  border-radius: var(--radius-sm);
+  padding: 9px 14px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: border-color 0.15s, background 0.15s, transform 0.08s, color 0.15s;
+}
+.btn:hover { border-color: var(--accent-dim); color: var(--accent); }
+.btn:active { transform: translateY(1px); }
+.btn--primary {
+  border: none;
+  color: #fdf6ec;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 8px 20px -10px var(--accent-glow);
+}
+.btn--primary:hover { color: #fdf6ec; filter: brightness(1.05); }
+.btn--primary:disabled {
+  background: var(--bg-0);
+  color: var(--text-lo);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.btn--ghost { background: transparent; }
+.btn--icon { padding: 8px; }
+
+/* form fields */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field > label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-mid);
+}
+.input,
+textarea.input,
+select.input {
+  font: inherit;
+  width: 100%;
+  color: var(--text-hi);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input::placeholder { color: var(--text-lo); }
+.input:focus,
+textarea.input:focus,
+select.input:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 3px var(--accent-ghost);
+}
+textarea.input { resize: vertical; line-height: 1.6; }
+
+.empty {
+  color: var(--text-lo);
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+/* a vermilion seal stamp — used as a decorative mark */
+.seal {
+  font-family: var(--font-brush);
+  display: inline-grid;
+  place-items: center;
+  color: #fdf6ec;
+  background: var(--accent);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1.5px rgba(253, 246, 236, 0.55),
+    0 4px 12px -6px var(--accent-glow);
+}
+
+/* ============================================================
+   animations
+   ============================================================ */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes inkspread {
+  from { opacity: 0; filter: blur(6px); transform: scale(0.96); }
+  to { opacity: 1; filter: blur(0); transform: none; }
+}
+@keyframes shimmer {
+  100% { background-position: 200% 0; }
+}
+
+.rise { animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+.ink-in { animation: inkspread 0.6s ease both; }
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-1) 0%,
+    var(--bg-3) 40%,
+    var(--bg-1) 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s linear infinite;
+  border-radius: var(--radius-xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
