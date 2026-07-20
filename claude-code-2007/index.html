@@ -25,6 +25,13 @@ body {
   background: #dfeefc;
   overflow: hidden;
 }
+/* 原生窗口（pywebview）里，窗口本身就是边框，QQ 窗口铺满整个窗口，去掉桌面壁纸的浮窗观感 */
+html.native, html.native body { background: #dfeefc; }
+html.native body { align-items: stretch; justify-content: stretch; }
+html.native #win {
+  width: 100%; height: 100%;
+  border: none; border-radius: 0; box-shadow: none;
+}
 
 /* 标题栏 */
 #titlebar {
@@ -34,17 +41,23 @@ body {
   color: #fff; text-shadow: 1px 1px 1px rgba(0,0,40,.6);
   font-weight: bold; user-select: none;
 }
+#titlebar .tb-drag { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; -webkit-app-region: drag; }
+#titlebar .winbtn { -webkit-app-region: no-drag; }
 #titlebar .app-icon { width: 18px; height: 18px; margin-right: 6px; }
 #titlebar .title { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .winbtn {
   width: 24px; height: 22px; margin-left: 3px; border-radius: 3px;
   border: 1px solid rgba(255,255,255,.55);
   background: linear-gradient(#7fb2ec, #2b6cd0);
-  color: #fff; font: bold 11px Tahoma; line-height: 20px; text-align: center;
-  cursor: pointer; text-shadow: none;
+  color: #fff; font: bold 11px Tahoma; cursor: pointer; text-shadow: none;
+  display: flex; align-items: center; justify-content: center;
 }
 .winbtn:hover { filter: brightness(1.15); }
 .winbtn.close { background: linear-gradient(#f2a08a, #d8452a 45%, #b8300f); }
+/* CSS 画的窗口图标:最小化=下横线,最大化=方框,还原=双方框 */
+.wb-min::before { content: ''; width: 10px; height: 2px; background: #fff; border-radius: 1px; margin-top: 7px; }
+.wb-max::before { content: ''; width: 9px; height: 8px; border: 1.5px solid #fff; box-sizing: border-box; border-radius: 1px; }
+.wb-max.restore::before { width: 7px; height: 7px; box-shadow: 3px -3px 0 -1px #2b6cd0, 3px -3px 0 0.5px #fff; }
 
 /* 工具栏 */
 #toolbar {
@@ -91,6 +104,13 @@ body {
   background: linear-gradient(#cfe4f9, #b3d3f2); border-color: #86aede; border-radius: 2px;
 }
 .task-item .t-title { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.task-item .t-ava { width: 22px; height: 22px; flex: none; border-radius: 4px; overflow: hidden; }
+.task-item .t-ava svg { width: 100%; height: 100%; display: block; }
+.task-item .t-ava .emo { font-size: 15px; }
+.task-item .t-acts { display: flex; gap: 2px; margin-left: auto; opacity: 0; }
+.task-item:hover .t-acts, .task-item.active .t-acts { opacity: 1; }
+.task-item .t-pin, .task-item .t-del { padding: 0 3px; cursor: pointer; font-size: 12px; }
+.task-item .t-del { color: #c0392b; font-weight: 700; }
 .task-item .t-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .t-dot.running { background: #43a047; box-shadow: 0 0 4px #43a047; animation: blink 1s infinite; }
 .t-dot.idle { background: #9e9e9e; }
@@ -101,13 +121,17 @@ body {
 #usercard {
   flex: none; display: flex; align-items: center; gap: 8px;
   padding: 7px 10px; border-top: 1px solid #a8c3e2;
-  background: linear-gradient(#e9f3fc, #cfe2f6);
+  background: linear-gradient(#e9f3fc, #cfe2f6); cursor: pointer;
 }
+#usercard:hover { background: linear-gradient(#f2f8fe, #d8e8f8); }
 #usercard .avatar {
   width: 34px; height: 34px; border-radius: 4px; border: 1px solid #7da7d9;
   background: linear-gradient(#fff, #cfe3f8); display: flex; align-items: center;
-  justify-content: center; font-size: 20px;
+  justify-content: center; font-size: 20px; overflow: hidden;
 }
+#usercard .avatar svg { width: 100%; height: 100%; display: block; }
+#usercard .me-edit { color: #5a7699; font-size: 11px; opacity: 0; }
+#usercard:hover .me-edit { opacity: 1; }
 #usercard .uname { font-weight: bold; color: #1b3f6e; }
 #usercard .ustatus { color: #3c7a3c; font-size: 11px; }
 #usercard .ustatus::before { content: "●"; color: #43a047; margin-right: 3px; }
@@ -120,6 +144,12 @@ body {
   border-bottom: 1px solid #b8d0ea; color: #1b3f6e; font-weight: bold;
 }
 #chat-hd .doc-ico { font-size: 16px; }
+#chat-avatar { width: 22px; height: 22px; display: inline-flex; }
+#chat-avatar svg { width: 100%; height: 100%; display: block; border-radius: 4px; }
+.m-head { display: flex; align-items: center; gap: 5px; }
+.m-head .mh-ava { width: 18px; height: 18px; display: inline-flex; flex: none; }
+.m-head .mh-ava svg { width: 100%; height: 100%; display: block; border-radius: 3px; }
+.m-head .mh-ava .emo { font-size: 14px; }
 #chat-meta { font-weight: normal; color: #6c86a8; font-size: 11px; margin-left: auto; }
 #messages { flex: 1; overflow-y: auto; padding: 14px 18px; min-height: 0; background: #fff; }
 
@@ -245,6 +275,18 @@ body {
 .friend .f-name { font-weight: bold; color: #1b3f6e; }
 .friend .f-sign { color: #93a5ba; font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 130px; }
 .friend.off { filter: grayscale(1); opacity: .65; }
+.friend .f-del { margin-left: auto; color: #c0392b; font-weight: 700; padding: 0 6px; opacity: 0; cursor: pointer; }
+.friend:hover .f-del { opacity: .8; }
+.friend .f-del:hover { opacity: 1; }
+.f-ava svg { width: 100%; height: 100%; display: block; }
+.f-ava .emo { font-size: 22px; line-height: 1; }
+
+/* 头像选择器 */
+.avatar-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
+.avatar-grid .av-cell { aspect-ratio: 1; border: 2px solid transparent; border-radius: 6px; cursor: pointer; overflow: hidden; background: #fff; }
+.avatar-grid .av-cell svg { width: 100%; height: 100%; display: block; }
+.avatar-grid .av-cell:hover { border-color: #9cc0e4; }
+.avatar-grid .av-cell.sel { border-color: #1b5cc8; box-shadow: 0 0 0 2px #ffb531 inset; }
 
 /* 底部状态栏 */
 #statusbar {
@@ -258,26 +300,27 @@ body {
 #clock { font-family: Tahoma; }
 
 /* 弹窗 */
-#modal-mask { position: fixed; inset: 0; background: rgba(20,40,80,.35); display: none; align-items: center; justify-content: center; z-index: 50; }
-#modal-mask.show { display: flex; }
-#modal {
+#modal-mask, .modal-mask { position: fixed; inset: 0; background: rgba(20,40,80,.35); display: none; align-items: center; justify-content: center; z-index: 50; }
+#modal-mask.show, .modal-mask.show { display: flex; }
+#modal, .modal {
   width: 430px; border: 1px solid #003c74; border-radius: 6px 6px 3px 3px;
   background: #ece9d8; box-shadow: 0 6px 30px rgba(0,20,60,.5); overflow: hidden;
 }
-#modal .m-title {
+#modal .m-title, .modal .m-title {
   height: 26px; display: flex; align-items: center; padding: 0 8px; color: #fff; font-weight: bold;
   background: linear-gradient(#5aa0e8, #1b5cc8 45%, #1450b8);
   text-shadow: 1px 1px 1px rgba(0,0,40,.6);
 }
-#modal .m-title .winbtn { margin-left: auto; }
-#modal .m-body-form { padding: 14px 16px; display: flex; flex-direction: column; gap: 9px; background: #f4f3ea; }
-#modal label { color: #333; display: flex; align-items: center; gap: 8px; }
-#modal label .lab { width: 62px; flex: none; text-align: right; color: #444; }
-#modal input[type=text], #modal select, #modal textarea {
+#modal .m-title .winbtn, .modal .m-title .winbtn { margin-left: auto; }
+#modal .m-body-form, .modal .m-body-form { padding: 14px 16px; display: flex; flex-direction: column; gap: 9px; background: #f4f3ea; }
+#modal label, .modal label { color: #333; display: flex; align-items: center; gap: 8px; }
+#modal label .lab, .modal label .lab { width: 62px; flex: none; text-align: right; color: #444; }
+#modal input, #modal select, #modal textarea,
+.modal input, .modal select, .modal textarea {
   flex: 1; border: 1px solid #7f9db9; padding: 3px 6px; font: 12px Tahoma, "宋体"; outline-color: #2b6cd0; background: #fff;
 }
-#modal textarea { height: 90px; resize: vertical; }
-#modal .m-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px 14px; background: #f4f3ea; }
+#modal textarea, .modal textarea { height: 90px; resize: vertical; }
+#modal .m-foot, .modal .m-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px 14px; background: #f4f3ea; }
 .xp-btn {
   min-width: 74px; height: 24px; cursor: pointer;
   border: 1px solid #003c74; border-radius: 3px;
@@ -305,6 +348,113 @@ body {
 #emoji-panel.show { display: grid; }
 #emoji-panel span { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; border-radius: 3px; }
 #emoji-panel span:hover { background: #d9e9fa; }
+
+/* 斜杠命令下拉 */
+#slash-pop {
+  position: absolute; display: none; background: #fff; border: 1px solid #7f9db9;
+  box-shadow: 2px 3px 12px rgba(0,20,60,.32); border-radius: 4px; z-index: 60;
+  width: 340px; max-height: 300px; overflow-y: auto; padding: 3px;
+}
+#slash-pop.show { display: block; }
+#slash-pop .sp-hd { font-size: 11px; color: #5a7699; padding: 4px 8px 3px; }
+#slash-pop .sp-item { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; border-radius: 3px; cursor: pointer; }
+#slash-pop .sp-item.active { background: linear-gradient(#dcebfb, #c6ddf6); }
+#slash-pop .sp-item:hover { background: #eaf3fc; }
+#slash-pop .sp-name { color: #12467e; font-weight: 700; white-space: nowrap; }
+#slash-pop .sp-desc { color: #7a8aa0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 附加目录弹窗 */
+#attach-pop {
+  position: absolute; display: none; background: #fff; border: 1px solid #7f9db9;
+  box-shadow: 2px 3px 12px rgba(0,20,60,.32); border-radius: 4px; z-index: 60;
+  width: 360px; padding: 8px;
+}
+#attach-pop.show { display: block; }
+#attach-pop .ap-hd { font-size: 11px; color: #5a7699; margin-bottom: 6px; }
+#attach-pop .ap-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 3px; }
+#attach-pop .ap-row:hover { background: #f2f8ff; }
+#attach-pop .ap-path { flex: 1; font: 11px 'SFMono-Regular', Consolas, monospace; color: #234; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#attach-pop .ap-cwd { color: #2a7; }
+#attach-pop .ap-rm { color: #c0392b; cursor: pointer; font-weight: 700; padding: 0 4px; }
+#attach-pop .ap-add { display: flex; gap: 5px; margin-top: 7px; border-top: 1px solid #e4eef8; padding-top: 7px; }
+#attach-pop .ap-add input { flex: 1; border: 1px solid #7f9db9; border-radius: 3px; padding: 3px 6px; font: 11px Tahoma; }
+#attach-pop .ap-quick { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+#attach-pop .ap-chip { font-size: 11px; border: 1px solid #cfe0f2; border-radius: 10px; padding: 2px 9px; background: #f7fbff; cursor: pointer; }
+#attach-pop .ap-chip:hover { background: #e7f1fc; }
+
+/* 定时任务 / CLAUDE.md 视图 */
+.cview { flex: 1; min-height: 0; display: none; flex-direction: column; background: #fff; }
+.cview.show { display: flex; }
+.cview-hd { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid #cfe0f2; background: linear-gradient(#f2f8ff, #e5f0fb); }
+.cview-hd .cv-title { font-weight: 700; color: #14467e; }
+.cview-hd .spacer { flex: 1; }
+.cview-body { flex: 1; overflow-y: auto; padding: 12px 14px; min-height: 0; }
+.sched-empty { color: #8aa; text-align: center; padding: 40px 10px; }
+.sched-card { border: 1px solid #cfe0f2; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; background: #fbfdff; }
+.sched-card.off { opacity: .55; }
+.sched-card .sc-top { display: flex; align-items: center; gap: 8px; }
+.sched-card .sc-title { font-weight: 700; color: #123; }
+.sched-card .sc-when { color: #2a6; font-size: 12px; }
+.sched-card .sc-meta { color: #789; font-size: 11px; margin-top: 3px; }
+.sched-card .sc-prompt { color: #556; font-size: 12px; margin-top: 5px; white-space: pre-wrap; word-break: break-word; background: #f1f6fc; border-radius: 4px; padding: 5px 7px; }
+.sched-card .sc-acts { margin-left: auto; display: flex; gap: 6px; }
+.mini-btn { font-size: 11px; padding: 3px 8px; border: 1px solid #9ebbdd; border-radius: 4px; background: linear-gradient(#fff, #e9f2fc); cursor: pointer; }
+.mini-btn:hover { background: linear-gradient(#eaf3fc, #d7e8fa); }
+.mini-btn.danger { border-color: #e0a; color: #c0392b; }
+.switch { position: relative; width: 40px; height: 20px; border-radius: 20px; background: #c3d3e5; cursor: pointer; transition: background .15s; flex: none; }
+.switch.on { background: #4b8ae8; }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
+.switch.on::after { left: 22px; }
+#md-editor { flex: 1; width: 100%; box-sizing: border-box; resize: none; border: 1px solid #b8d0ea; border-radius: 4px; padding: 10px; font: 12px/1.5 'SFMono-Regular', Consolas, monospace; background: #fcfdff; }
+.md-path { color: #789; font-size: 11px; margin: 0 0 8px; word-break: break-all; }
+
+/* 能力面板 */
+.cap-sec { margin-bottom: 14px; }
+.cap-sec .cap-hd { display: flex; align-items: center; gap: 6px; font-weight: 700; color: #14467e; margin-bottom: 7px; padding-bottom: 4px; border-bottom: 1px solid #dbe8f6; }
+.cap-sec .cap-hd .cap-n { font-size: 11px; color: #7a8aa0; font-weight: 400; }
+.cap-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+.cap-chip { display: flex; align-items: center; gap: 6px; border: 1px solid #cfe0f2; border-radius: 5px; padding: 5px 9px; background: #fbfdff; font-size: 12px; color: #234; }
+.cap-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: #9bb; flex: none; }
+.cap-chip .dot.ok { background: #3fb54b; }
+.cap-chip .dot.wait { background: #e5a53a; }
+.cap-chip .dot.err { background: #d0483a; }
+.cap-empty { color: #8aa; text-align: center; padding: 36px 10px; }
+
+/* QQ小游戏 */
+#game-menu { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.game-card { border: 1px solid #cfe0f2; border-radius: 8px; padding: 16px 12px; text-align: center; cursor: pointer; background: linear-gradient(#fbfdff, #eef5fd); }
+.game-card:hover { border-color: #7da7d9; box-shadow: 0 3px 12px rgba(0,40,90,.14); transform: translateY(-1px); }
+.game-card .gc-ico { font-size: 38px; }
+.game-card .gc-name { font-weight: 700; color: #14467e; margin: 5px 0 3px; }
+.game-card .gc-desc { color: #7a8aa0; font-size: 11px; line-height: 1.4; }
+#game-stage { display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 6px; }
+#game-stage canvas { border: 2px solid #1b5cc8; border-radius: 6px; background: #eaf3d0; box-shadow: 0 3px 14px rgba(0,40,90,.2); }
+.game-over { color: #c0392b; font-weight: 700; }
+.game-hint { color: #8aa; font-size: 12px; }
+/* 2048 */
+.g2048 { display: grid; grid-template-columns: repeat(4, 64px); grid-template-rows: repeat(4, 64px); gap: 8px; background: #bbada0; padding: 8px; border-radius: 8px; }
+.g2048 .cell { border-radius: 5px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px; background: #cdc1b4; color: #776e65; }
+/* 翻牌记忆 */
+.memory { display: grid; grid-template-columns: repeat(4, 60px); gap: 8px; }
+.memory .card { width: 60px; height: 60px; border-radius: 6px; font-size: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: linear-gradient(#5aa0e8, #1b5cc8); color: transparent; user-select: none; }
+.memory .card.flip { background: #fff; color: initial; border: 1px solid #9cc0e4; }
+.memory .card.done { background: #eaf7ea; color: initial; border: 1px solid #9ed9a0; cursor: default; }
+
+/* QQ空间 */
+#qz-post { border: 1px solid #cfe0f2; border-radius: 8px; padding: 10px; background: #fbfdff; margin-bottom: 12px; }
+#qz-post textarea { width: 100%; box-sizing: border-box; height: 56px; resize: none; border: 1px solid #b8d0ea; border-radius: 4px; padding: 7px; font: 12px Tahoma, "宋体"; }
+.qz-item { display: flex; gap: 9px; padding: 11px 4px; border-bottom: 1px solid #eef4fb; }
+.qz-ava { width: 40px; height: 40px; flex: none; border-radius: 6px; overflow: hidden; border: 1px solid #c8ddf2; }
+.qz-ava svg { width: 100%; height: 100%; display: block; }
+.qz-ava .emo { font-size: 26px; display: flex; align-items: center; justify-content: center; height: 100%; }
+.qz-main { flex: 1; min-width: 0; }
+.qz-name { font-weight: 700; color: #14467e; }
+.qz-name .me-tag { font-size: 10px; color: #fff; background: #f0a020; border-radius: 3px; padding: 0 4px; margin-left: 5px; font-weight: 400; }
+.qz-text { color: #333; margin: 3px 0 5px; white-space: pre-wrap; word-break: break-word; }
+.qz-foot { font-size: 11px; color: #8aa; display: flex; gap: 12px; align-items: center; }
+.qz-foot .qz-act { cursor: pointer; }
+.qz-foot .qz-act:hover { color: #1b5cc8; }
+.qz-foot .qz-del:hover { color: #c0392b; }
 </style>
 </head>
 <body>
@@ -312,21 +462,22 @@ body {
 <div id="win">
   <!-- 标题栏 -->
   <div id="titlebar">
-    <svg class="app-icon" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="#2b6cd0"/><rect x="3.5" y="4.5" width="13" height="11" rx="2" fill="#0d2b52"/><path d="M6 8l2.4 2L6 12" stroke="#7ef0ff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="9.6" y="11.2" width="4.4" height="1.5" rx=".7" fill="#7ef0ff"/></svg>
-    <span class="title" id="win-title">Claude Code 2007</span>
-    <div class="winbtn" title="最小化">🗕</div>
-    <div class="winbtn" title="最大化">🗖</div>
-    <div class="winbtn close" title="关闭">✕</div>
+    <div class="tb-drag" id="tb-drag">
+      <svg class="app-icon" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="#2b6cd0"/><rect x="3.5" y="4.5" width="13" height="11" rx="2" fill="#0d2b52"/><path d="M6 8l2.4 2L6 12" stroke="#7ef0ff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="9.6" y="11.2" width="4.4" height="1.5" rx=".7" fill="#7ef0ff"/></svg>
+      <span class="title" id="win-title">Claude Code 2007</span>
+    </div>
+    <div class="winbtn wb-min" id="win-min" title="最小化"></div>
+    <div class="winbtn wb-max" id="win-max" title="最大化"></div>
+    <div class="winbtn close" id="win-close" title="关闭">✕</div>
   </div>
 
   <!-- 工具栏 -->
   <div id="toolbar">
-    <div class="toolbtn" data-act="new"><span class="ico">📋</span>新建任务</div>
-    <div class="toolbtn" data-act="todo"><span class="ico">🗓️</span>已安排</div>
+    <div class="toolbtn" data-act="sched"><span class="ico">🗓️</span>我的安排</div>
     <div class="toolbar-sep"></div>
-    <div class="toolbtn" data-act="todo"><span class="ico">🧩</span>插件</div>
-    <div class="toolbtn" data-act="todo"><span class="ico">🌐</span>站点</div>
-    <div class="toolbtn" data-act="todo"><span class="ico">🔀</span>拉取请求</div>
+    <div class="toolbtn" data-act="skills"><span class="ico">🛠️</span>我的skill</div>
+    <div class="toolbtn" data-act="qzone"><span class="ico">🌟</span>QQ空间</div>
+    <div class="toolbtn" data-act="games"><span class="ico">🎮</span>QQ小游戏</div>
     <div class="toolbtn" data-act="chat"><span class="ico">💬</span>聊天</div>
   </div>
 
@@ -337,33 +488,32 @@ body {
       <div class="group-hd"><span>Claude Code</span><span class="arrow">▲</span></div>
       <div id="left-scroll">
         <div class="group-bd" id="nav-list">
-          <div class="nav-item" data-act="new">📋 新建任务</div>
-          <div class="nav-item" data-act="todo">🗓️ 已安排</div>
-          <div class="nav-item" data-act="todo">🧩 插件</div>
-          <div class="nav-item" data-act="todo">🌐 站点</div>
-          <div class="nav-item" data-act="todo">🔀 拉取请求</div>
+          <div class="nav-item" data-act="addfriend">➕ 添加好友</div>
+          <div class="nav-item" data-act="sched">⏰ 已安排</div>
+          <div class="nav-item" data-act="plugins">🧩 插件</div>
+          <div class="nav-item" data-act="md">📄 CLAUDE.md</div>
+          <div class="nav-item" data-act="qzone">🌟 QQ空间</div>
           <div class="nav-item" data-act="chat">💬 聊天</div>
         </div>
         <div class="group-hd" data-toggle="pinned-list"><span>置顶</span><span class="arrow">▲</span></div>
         <div class="group-bd" id="pinned-list"></div>
-        <div class="group-hd" data-toggle="proj-list"><span>项目</span><span class="arrow">▲</span></div>
-        <div class="group-bd" id="proj-list"></div>
-        <div class="group-hd" data-toggle="task-list"><span>任务</span><span class="arrow">▲</span></div>
+        <div class="group-hd" data-toggle="task-list"><span>聊天信息</span><span class="arrow">▲</span></div>
         <div class="group-bd" id="task-list"></div>
       </div>
-      <div id="usercard">
-        <div class="avatar">🧑‍💻</div>
-        <div>
+      <div id="usercard" title="点击编辑我的资料">
+        <div class="avatar" id="me-avatar">🧑‍💻</div>
+        <div style="flex:1;min-width:0">
           <div class="uname" id="uname">我</div>
           <div class="ustatus">在线</div>
         </div>
+        <span class="me-edit">✎ 编辑</span>
       </div>
     </div>
 
     <!-- 中栏 -->
     <div id="center">
       <div id="chat-hd">
-        <span class="doc-ico">📄</span>
+        <span id="chat-avatar" class="doc-ico">📄</span>
         <span id="chat-title">欢迎使用</span>
         <span id="chat-meta"></span>
       </div>
@@ -377,8 +527,8 @@ body {
       <div id="input-area">
         <div id="input-tools">
           <div class="in-btn" id="emoji-btn">😊 表情</div>
-          <div class="in-btn" data-act="todo">🖼️ 图片</div>
-          <div class="in-btn" data-act="todo">📎 附加 ▾</div>
+          <div class="in-btn" id="slash-btn">⚡ 命令</div>
+          <div class="in-btn" id="attach-btn">📎 附加 ▾</div>
           <div class="in-btn" id="stop-btn">⏹ 停止</div>
         </div>
         <textarea id="prompt" placeholder="要求后续变更…（Ctrl+Enter 发送）"></textarea>
@@ -386,6 +536,85 @@ body {
           <span style="color:#93a5ba">连按两次 Ctrl+Enter 也不会重复发送，放心敲</span>
           <div id="model-badge">⚙ <span class="chip" id="model-chip">sonnet</span></div>
           <button id="send-btn">发送(S) ▾</button>
+        </div>
+      </div>
+
+      <!-- 定时任务视图 -->
+      <div id="sched-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">⏰ 已安排 · 定时任务</span>
+          <span class="spacer"></span>
+          <button class="mini-btn" id="sched-new-btn">＋ 新建定时任务</button>
+        </div>
+        <div class="cview-body"><div id="sched-list"></div></div>
+      </div>
+
+      <!-- 插件 / 能力面板视图 -->
+      <div id="plugins-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">🧩 插件 · 能力面板</span>
+          <span class="spacer"></span>
+          <span id="plugins-meta" style="font-size:11px;color:#5a7699"></span>
+        </div>
+        <div class="cview-body"><div id="plugins-body"></div></div>
+      </div>
+
+      <!-- 我的 skill 管理视图 -->
+      <div id="skills-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">🛠️ 我的 skill</span>
+          <span class="spacer"></span>
+          <button class="mini-btn" id="skill-new-btn">＋ 新建 skill</button>
+        </div>
+        <div class="cview-body"><div id="skills-list"></div></div>
+      </div>
+
+      <!-- QQ小游戏 视图 -->
+      <div id="games-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">🎮 QQ小游戏</span>
+          <span class="spacer"></span>
+          <span id="game-score" style="font-size:12px;color:#5a7699"></span>
+          <button class="mini-btn" id="game-back" style="display:none">↩ 游戏大厅</button>
+        </div>
+        <div class="cview-body">
+          <div id="game-menu">
+            <div class="game-card" data-game="snake"><div class="gc-ico">🐍</div><div class="gc-name">贪吃蛇</div><div class="gc-desc">方向键 / WASD 控制，吃豆变长，别撞墙撞自己</div></div>
+            <div class="game-card" data-game="g2048"><div class="gc-ico">🔢</div><div class="gc-name">2048</div><div class="gc-desc">方向键合并相同数字，凑出 2048</div></div>
+            <div class="game-card" data-game="memory"><div class="gc-ico">🃏</div><div class="gc-name">翻牌记忆</div><div class="gc-desc">翻开两张相同的 emoji 配对，全配对即通关</div></div>
+          </div>
+          <div id="game-stage" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- QQ空间 视图 -->
+      <div id="qzone-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">🌟 QQ空间</span>
+          <span class="spacer"></span>
+          <span id="qz-me" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#14467e"></span>
+        </div>
+        <div class="cview-body">
+          <div id="qz-post">
+            <textarea id="qz-text" placeholder="这一刻的想法…（发条动态）"></textarea>
+            <div style="text-align:right;margin-top:6px"><button class="mini-btn" id="qz-send">发表</button></div>
+          </div>
+          <div id="qz-feed"></div>
+        </div>
+      </div>
+
+      <!-- CLAUDE.md 编辑视图 -->
+      <div id="md-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">📄 CLAUDE.md</span>
+          <select id="md-project" style="max-width:160px"></select>
+          <span class="spacer"></span>
+          <button class="mini-btn" id="md-reload-btn">↺ 重新加载</button>
+          <button class="mini-btn" id="md-save-btn">💾 保存</button>
+        </div>
+        <div class="cview-body" style="display:flex;flex-direction:column">
+          <p class="md-path" id="md-path"></p>
+          <textarea id="md-editor" placeholder="# 项目说明 / 给 Claude 的指令…"></textarea>
         </div>
       </div>
     </div>
@@ -414,13 +643,8 @@ body {
         <div><span class="pname">Claude 小蓝</span><span class="lv">LV·07</span></div>
         <div style="margin-top:4px">代码有问题？找我！<br>我是你的智能伙伴 Claude<br>陪你写代码，改 Bug，<br>查文档，超可靠哒！</div>
       </div>
-      <div class="group-hd"><span>我的好友 (2/8)</span><span class="arrow">▲</span></div>
-      <div id="friends">
-        <div class="friend"><div class="f-ava">🤖</div><div><div class="f-name">Claude 小蓝</div><div class="f-sign">[在线] 随时待命～</div></div></div>
-        <div class="friend"><div class="f-ava">👧</div><div><div class="f-name">小美</div><div class="f-sign">[Q我吧] 谁帮我修下CSS</div></div></div>
-        <div class="friend off"><div class="f-ava">🐧</div><div><div class="f-name">Codex</div><div class="f-sign">[离线] 下班了</div></div></div>
-        <div class="friend off"><div class="f-ava">🦊</div><div><div class="f-name">Copilot</div><div class="f-sign">[离线] 开会中…</div></div></div>
-      </div>
+      <div class="group-hd"><span id="friends-hd">我的好友</span><span class="arrow">▲</span></div>
+      <div id="friends"></div>
     </div>
   </div>
 
@@ -437,6 +661,12 @@ body {
 
 <!-- 表情面板 -->
 <div id="emoji-panel"></div>
+
+<!-- 斜杠命令下拉 -->
+<div id="slash-pop"></div>
+
+<!-- 附加:允许 Claude 访问的目录 -->
+<div id="attach-pop"></div>
 
 <!-- 新建任务弹窗 -->
 <div id="modal-mask">
@@ -461,11 +691,112 @@ body {
   </div>
 </div>
 
+<!-- 新建定时任务弹窗 -->
+<div id="sched-mask" class="modal-mask">
+  <div class="modal">
+    <div class="m-title">⏰ 新建定时任务<div class="winbtn close" id="sm-close">✕</div></div>
+    <div class="m-body-form">
+      <label><span class="lab">标题：</span><input type="text" id="s-title" placeholder="留空自动取指令前几个字"></label>
+      <label><span class="lab">项目：</span><select id="s-project"></select></label>
+      <label><span class="lab">模型：</span><select id="s-model"></select></label>
+      <label><span class="lab">权限：</span><select id="s-perm">
+        <option value="acceptEdits">acceptEdits（自动接受编辑）</option>
+        <option value="plan">plan（只做规划）</option>
+        <option value="default">default（默认）</option>
+        <option value="bypassPermissions">bypassPermissions（全自动，慎用）</option>
+      </select></label>
+      <label><span class="lab">触发：</span><select id="s-type">
+        <option value="daily">每天定时</option>
+        <option value="interval">每隔一段</option>
+        <option value="once">一次性</option>
+      </select></label>
+      <label id="s-row-time"><span class="lab">时间：</span><input type="time" id="s-time" value="09:00"></label>
+      <label id="s-row-interval" style="display:none"><span class="lab">间隔：</span><span>每 <input type="number" id="s-interval" value="60" min="1" style="width:70px"> 分钟</span></label>
+      <label id="s-row-once" style="display:none"><span class="lab">运行于：</span><input type="datetime-local" id="s-datetime"></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">指令：</span><textarea id="s-prompt" placeholder="例如：/security-review / 把今天的改动跑一遍测试"></textarea></label>
+    </div>
+    <div class="m-foot">
+      <button class="xp-btn" id="s-ok">确定</button>
+      <button class="xp-btn" id="s-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 添加好友弹窗 -->
+<div id="friend-mask" class="modal-mask">
+  <div class="modal">
+    <div class="m-title">➕ 添加好友<div class="winbtn close" id="fr-close">✕</div></div>
+    <div class="m-body-form">
+      <label><span class="lab">名字：</span><input type="text" id="fr-name" placeholder="例如：小美 / 老王 / 产品经理 Lisa"></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">头像：</span>
+        <div style="flex:1">
+          <div id="fr-avatar-grid" class="avatar-grid"></div>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
+            <span style="color:#789;font-size:11px">或用 emoji</span>
+            <input type="text" id="fr-avatar" class="av-emoji" maxlength="4" style="max-width:70px" placeholder="🙂">
+          </div>
+        </div>
+      </label>
+      <label><span class="lab">签名：</span><input type="text" id="fr-sign" placeholder="状态签名，如 有 Bug 找我"></label>
+      <label><span class="lab">项目：</span><select id="fr-project"></select></label>
+      <label><span class="lab">模型：</span><select id="fr-model"></select></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">性格：</span><textarea id="fr-persona" placeholder="设定这个好友的人设/说话风格。例如：你是资深后端老王，讲话像带徒弟，先讲原理再给方案。"></textarea></label>
+    </div>
+    <div class="m-foot">
+      <button class="xp-btn" id="fr-ok">添加</button>
+      <button class="xp-btn" id="fr-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新建/编辑 skill 弹窗 -->
+<div id="skill-mask" class="modal-mask">
+  <div class="modal" style="width:560px">
+    <div class="m-title"><span id="skill-mtitle">🛠️ 新建 skill</span><div class="winbtn close" id="sk-close">✕</div></div>
+    <div class="m-body-form">
+      <label><span class="lab">名称：</span><input type="text" id="sk-name" placeholder="小写字母/数字/连字符，如 my-helper"></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">说明：</span><textarea id="sk-desc" style="height:56px" placeholder="一句话描述这个 skill 干嘛的（Claude 靠它判断何时调用）"></textarea></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">内容：</span><textarea id="sk-body" style="height:200px;font-family:'SFMono-Regular',Consolas,monospace" placeholder="skill 的正文（Markdown）：给 Claude 的具体指令/步骤。"></textarea></label>
+    </div>
+    <div class="m-foot">
+      <button class="xp-btn" id="sk-ok">保存</button>
+      <button class="xp-btn" id="sk-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑我的资料弹窗 -->
+<div id="profile-mask" class="modal-mask">
+  <div class="modal">
+    <div class="m-title">👤 我的资料<div class="winbtn close" id="pf-close">✕</div></div>
+    <div class="m-body-form">
+      <label><span class="lab">昵称：</span><input type="text" id="pf-name" placeholder="你的昵称"></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">头像：</span>
+        <div style="flex:1">
+          <div id="pf-avatar-grid" class="avatar-grid"></div>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
+            <span style="color:#789;font-size:11px">或用 emoji</span>
+            <input type="text" id="pf-avatar" class="av-emoji" maxlength="4" style="max-width:70px" placeholder="🙂">
+          </div>
+        </div>
+      </label>
+    </div>
+    <div class="m-foot">
+      <button class="xp-btn" id="pf-ok">保存</button>
+      <button class="xp-btn" id="pf-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ================= 状态 ================= */
 const $ = s => document.querySelector(s);
 let CONFIG = { projects: [], models: ["sonnet"], default_model: "sonnet", user_name: "我" };
 let TASKS = [];
+let SLASH = [];                // 斜杠命令列表 [{name, desc}]
+let FRIEND_LIST = [];          // 我的好友 [{id,name,avatar,sign,persona,project,model}]
+let ME = { name: '我', avatar: 'qq1' };          // 我自己的资料
+let currentAgent = { name: 'Claude 小蓝', avatar: 'qq1' };  // 当前对话的对方
 let currentTaskId = null;
 let es = null;                 // 当前 EventSource
 let renderedCount = 0;         // 已渲染事件数（SSE 重连回放时跳过）
@@ -521,7 +852,7 @@ function scrollBottom() { const m = msgContainer(); m.scrollTop = m.scrollHeight
 function addUserMsg(text, ts) {
   const div = document.createElement('div');
   div.className = 'msg user';
-  div.innerHTML = `<div class="m-head">${esc(CONFIG.user_name)} ${ts ? fmtTime(ts) : ''}</div>` +
+  div.innerHTML = `<div class="m-head"><span class="mh-ava">${avatarHtml(ME.avatar)}</span>${esc(ME.name)} ${ts ? fmtTime(ts) : ''}</div>` +
     `<div class="m-body">${mdInline(text)}</div>`;
   msgContainer().appendChild(div); scrollBottom();
 }
@@ -534,7 +865,7 @@ function ensureBubble(v, msgId) {
   }
   const div = document.createElement('div');
   div.className = 'msg agent';
-  div.innerHTML = `<div class="m-head">Claude 小蓝 ${fmtTime(Date.now()/1000)}</div>` +
+  div.innerHTML = `<div class="m-head"><span class="mh-ava">${avatarHtml(currentAgent.avatar)}</span>${esc(currentAgent.name)} ${fmtTime(Date.now()/1000)}</div>` +
     `<div class="m-body"><div class="blocks"></div><div class="stream"></div></div>`;
   msgContainer().appendChild(div);
   v.curEl = div; v.curMsgId = msgId || null; v.streamBuf = '';
@@ -645,6 +976,9 @@ function handleEvent(ev) {
       addResultLine(ev);
       setTaskStatus(currentTaskId, ev.is_error ? 'error' : 'idle');
       break;
+    case 'x-sys':
+      addSysLine('📎 ' + ev.text);
+      break;
     case 'x-stderr':
       addSysLine('⚠ ' + ev.text.split('\n').slice(-3).join(' / ').slice(0, 300));
       break;
@@ -657,17 +991,7 @@ function handleEvent(ev) {
 /* ================= 任务列表 / SSE ================= */
 async function loadConfig() {
   CONFIG = await (await fetch('/api/config')).json();
-  $('#uname').textContent = CONFIG.user_name || '我';
   $('#model-chip').textContent = CONFIG.default_model;
-  const pin = $('#pinned-list'), prj = $('#proj-list');
-  pin.innerHTML = ''; prj.innerHTML = '';
-  for (const p of CONFIG.projects) {
-    const d = document.createElement('div');
-    d.className = 'proj-item';
-    d.innerHTML = `📁 ${esc(p.name)}` + (p.exists ? '' : ' <span style="color:#c62828;font-size:10px">(缺失)</span>');
-    d.onclick = () => openNewTaskModal(p.name);
-    (p.pinned ? pin : prj).appendChild(d);
-  }
   const sel = $('#f-project'); sel.innerHTML = '';
   for (const p of CONFIG.projects) {
     const o = document.createElement('option');
@@ -682,21 +1006,179 @@ async function loadConfig() {
     if (m === CONFIG.default_model) o.selected = true;
     ms.appendChild(o);
   }
+  // 定时任务弹窗 / CLAUDE.md 视图 / 添加好友弹窗共用同一批项目/模型
+  fillProjectSelect($('#s-project'));
+  fillProjectSelect($('#md-project'));
+  fillProjectSelect($('#fr-project'));
+  fillModelSelect($('#s-model'));
+  fillModelSelect($('#fr-model'));
+}
+/* 经典 QQ 风格的原创卡通头像（自绘 SVG，可看图选择） */
+const QQ_AVATARS = [
+  { id: 'qq1', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#5b9be8"/><circle cx="20" cy="23" r="10.5" fill="#ffd2a6"/><path d="M9.5 20a10.5 10.5 0 0 1 21 0c-3.5-3-6-4.5-10.5-4.5S13 17 9.5 20z" fill="#6b4326"/><circle cx="16.5" cy="23" r="1.5" fill="#3a2a20"/><circle cx="23.5" cy="23" r="1.5" fill="#3a2a20"/><path d="M17.5 28q2.5 2 5 0" stroke="#c47a4e" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>' },
+  { id: 'qq2', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#f48fb1"/><circle cx="10" cy="21" r="4" fill="#8a5a2c"/><circle cx="30" cy="21" r="4" fill="#8a5a2c"/><circle cx="20" cy="23" r="10.5" fill="#ffd2a6"/><path d="M9.5 21a10.5 10.5 0 0 1 21 0c-3-3.5-6-5-10.5-5S12.5 17.5 9.5 21z" fill="#8a5a2c"/><circle cx="16.5" cy="23" r="1.5" fill="#3a2a20"/><circle cx="23.5" cy="23" r="1.5" fill="#3a2a20"/><circle cx="13.5" cy="26.5" r="1.5" fill="#ff9db0"/><circle cx="26.5" cy="26.5" r="1.5" fill="#ff9db0"/><path d="M17.5 28q2.5 2 5 0" stroke="#c47a4e" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>' },
+  { id: 'qq3', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#4db6ac"/><circle cx="20" cy="23" r="10.5" fill="#ffd2a6"/><path d="M9.5 19a10.5 10.5 0 0 1 21 0c-3.5-3-6-4-10.5-4S13 16 9.5 19z" fill="#2f2a26"/><circle cx="15.5" cy="23" r="3.3" fill="#d6f2ff" stroke="#2f2a26" stroke-width="1.3"/><circle cx="24.5" cy="23" r="3.3" fill="#d6f2ff" stroke="#2f2a26" stroke-width="1.3"/><path d="M18.8 23h2.4M12.2 22l-2.2-1M27.8 22l2.2-1" stroke="#2f2a26" stroke-width="1.3" stroke-linecap="round"/><path d="M17.5 29q2.5 1.6 5 0" stroke="#c47a4e" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>' },
+  { id: 'qq4', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#ff9d5c"/><circle cx="20" cy="24" r="10" fill="#ffd2a6"/><path d="M8 20a12 6 0 0 1 24 0z" fill="#d84343"/><rect x="8" y="19" width="18" height="2.6" rx="1.3" fill="#b23434"/><path d="M8 20q-3.5 .3-4.5 2 3.5 .5 6 0z" fill="#b23434"/><circle cx="16.5" cy="25" r="1.5" fill="#3a2a20"/><circle cx="23.5" cy="25" r="1.5" fill="#3a2a20"/><path d="M17.5 29q2.5 2 5 0" stroke="#c47a4e" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>' },
+  { id: 'qq5', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#5c6bc0"/><circle cx="20" cy="23" r="10.5" fill="#ffd2a6"/><path d="M9.5 19a10.5 10.5 0 0 1 21 0c-3.5-3-6-4-10.5-4S13 16 9.5 19z" fill="#2f2a26"/><path d="M11.5 21.5h7v2.8a3.5 3.5 0 0 1-7 0zM21.5 21.5h7v2.8a3.5 3.5 0 0 1-7 0zM18.5 22.4h3" fill="#111" stroke="#111" stroke-width="1"/><path d="M16 29q4 1.6 8-.5" stroke="#c47a4e" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>' },
+  { id: 'qq6', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#90caf9"/><ellipse cx="20" cy="9" rx="6.5" ry="2.2" fill="none" stroke="#ffe082" stroke-width="1.7"/><circle cx="20" cy="24" r="10.5" fill="#ffe0c0"/><path d="M10 21a10 10 0 0 1 20 0c-3-3-6-4.5-10-4.5S13 18 10 21z" fill="#f4c56b"/><circle cx="16.5" cy="24" r="1.5" fill="#3a2a20"/><circle cx="23.5" cy="24" r="1.5" fill="#3a2a20"/><circle cx="13.5" cy="27" r="1.6" fill="#ffb3ba"/><circle cx="26.5" cy="27" r="1.6" fill="#ffb3ba"/><path d="M17.5 29q2.5 1.6 5 0" stroke="#c47a4e" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>' },
+  { id: 'qq7', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#ef5350"/><path d="M12 15c-1-3-3-4-4-5 0 3 1 5 3 6zM28 15c1-3 3-4 4-5 0 3-1 5-3 6z" fill="#7a1f1f"/><circle cx="20" cy="24" r="10.5" fill="#ffc1a0"/><path d="M10 20a10 10 0 0 1 20 0c-3-3-6-4-10-4s-7 1-10 4z" fill="#5a2a2a"/><path d="M15 23l3 1M25 23l-3 1" stroke="#3a2a20" stroke-width="1.5" stroke-linecap="round"/><path d="M15.5 28q4.5 3 9 0" stroke="#8a3b3b" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>' },
+  { id: 'qq8', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#ab6fd6"/><path d="M12 16l-2-6 7 3zM28 16l2-6-7 3z" fill="#ffd2a6"/><circle cx="20" cy="24" r="10" fill="#ffd2a6"/><circle cx="16.5" cy="24" r="1.5" fill="#3a2a20"/><circle cx="23.5" cy="24" r="1.5" fill="#3a2a20"/><path d="M20 26.6l-1.2 1.4M20 26.6l1.2 1.4" stroke="#c47a4e" stroke-width="1.2" stroke-linecap="round" fill="none"/><path d="M9 24h5M9 26h5M26 24h5M26 26h5" stroke="#d8b48a" stroke-width=".8"/></svg>' },
+  { id: 'qq9', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#8d6e63"/><circle cx="20" cy="23" r="10.5" fill="#ffd2a6"/><path d="M10 19a10 10 0 0 1 20 0c-3-2.5-6-3.5-10-3.5S13 16.5 10 19z" fill="#59524e"/><circle cx="16.5" cy="23" r="1.5" fill="#3a2a20"/><circle cx="23.5" cy="23" r="1.5" fill="#3a2a20"/><path d="M14 28q3-2 6 0 3-2 6 0" stroke="#59524e" stroke-width="1.9" fill="none" stroke-linecap="round"/></svg>' },
+  { id: 'qq10', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#ffd54f"/><circle cx="20" cy="23" r="11" fill="#ffe0c0"/><path d="M20 12c2-1 4 1 2 2.5" stroke="#c98a3a" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="16.5" cy="23" r="1.6" fill="#3a2a20"/><circle cx="23.5" cy="23" r="1.6" fill="#3a2a20"/><circle cx="13.5" cy="26.5" r="1.8" fill="#ffb3ba"/><circle cx="26.5" cy="26.5" r="1.8" fill="#ffb3ba"/><circle cx="20" cy="28.5" r="1.6" fill="#e0708a"/></svg>' },
+  { id: 'qq11', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#26c6da"/><ellipse cx="20" cy="24" rx="9" ry="11" fill="#2a2f3a"/><ellipse cx="20" cy="26" rx="6" ry="8" fill="#fff"/><circle cx="17" cy="19" r="1.4" fill="#222"/><circle cx="23" cy="19" r="1.4" fill="#222"/><path d="M18.3 21.5h3.4l-1.7 2.2z" fill="#ff9d1e"/></svg>' },
+  { id: 'qq12', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#90a4ae"/><rect x="10" y="15" width="20" height="17" rx="4" fill="#e6ebee"/><rect x="19" y="10" width="2" height="4" fill="#546670"/><circle cx="20" cy="9.3" r="1.7" fill="#ffce54"/><circle cx="16" cy="22" r="2.3" fill="#3aa0ff"/><circle cx="24" cy="22" r="2.3" fill="#3aa0ff"/><rect x="15" y="27" width="10" height="2.2" rx="1.1" fill="#546670"/></svg>' },
+];
+function avatarSvg(id) { const a = QQ_AVATARS.find(x => x.id === id); return a ? a.svg : null; }
+function avatarHtml(av) { const s = avatarSvg(av); return s || `<span class="emo">${esc(av || '🙂')}</span>`; }
+
+async function loadFriends() {
+  FRIEND_LIST = await (await fetch('/api/friends')).json();
+  renderFriends();
+}
+function renderFriends() {
+  const box = $('#friends');
+  $('#friends-hd').textContent = `我的好友 (${FRIEND_LIST.length})`;
+  box.innerHTML = FRIEND_LIST.map((f, i) =>
+    `<div class="friend" data-friend="${i}" title="点一下跟 ${esc(f.name)} 开聊">
+       <div class="f-ava">${avatarHtml(f.avatar)}</div>
+       <div style="flex:1;min-width:0"><div class="f-name">${esc(f.name)}</div>
+       <div class="f-sign">[在线] ${esc(f.sign || '')}</div></div>
+       <span class="f-del" data-delfriend="${esc(f.id)}" title="删除好友">✕</span>
+     </div>`).join('');
+}
+async function startFriendChat(f) {
+  if (!f) return;
+  const proj = f.project || (CONFIG.projects[0] || {}).name || '';
+  const prompt = `${f.persona}\n\n请用上面的人设，跟我打个招呼、简短开场（别超过三句）。之后一直保持这个人设跟我聊。`;
+  const res = await fetch('/api/tasks', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ title: `💬 ${f.name}`, project: proj, model: f.model || CONFIG.default_model, permission_mode: CONFIG.default_permission_mode, prompt,
+      agent_name: f.name, agent_avatar: f.avatar }) });
+  const task = await res.json();
+  if (task.error) { alert(task.error); return; }
+  TASKS.unshift(task);
+  openTask(task.id);
+}
+async function deleteFriend(id) {
+  if (!confirm('删除这个好友？（不影响已有的聊天信息）')) return;
+  await fetch(`/api/friends/${id}/delete`, { method: 'POST' });
+  loadFriends();
+}
+/* 添加好友弹窗 */
+/* 头像选择器（好友弹窗 & 我的资料弹窗共用）：看图选择，或输入 emoji */
+function buildAvatarGrid(grid, selectedId) {
+  grid.dataset.sel = selectedId || QQ_AVATARS[0].id;
+  grid.innerHTML = QQ_AVATARS.map(a =>
+    `<div class="av-cell${a.id === grid.dataset.sel ? ' sel' : ''}" data-avpick="${a.id}">${a.svg}</div>`).join('');
+}
+function pickedAvatar(grid, emojiInput) {
+  const emo = emojiInput.value.trim();
+  return emo || grid.dataset.sel || QQ_AVATARS[0].id;
+}
+document.addEventListener('click', e => {
+  const cell = e.target.closest('.av-cell[data-avpick]');
+  if (!cell) return;
+  const grid = cell.parentElement;
+  grid.dataset.sel = cell.dataset.avpick;
+  [...grid.children].forEach(c => c.classList.toggle('sel', c === cell));
+  const emo = grid.closest('.modal') && grid.closest('.modal').querySelector('.av-emoji');
+  if (emo) emo.value = '';
+});
+
+function openFriendModal() {
+  buildAvatarGrid($('#fr-avatar-grid'), 'qq2');
+  $('#friend-mask').classList.add('show');
+  $('#fr-name').focus();
+}
+function closeFriendModal() { $('#friend-mask').classList.remove('show'); }
+async function createFriend() {
+  const name = $('#fr-name').value.trim();
+  if (!name) { $('#fr-name').focus(); return; }
+  const body = {
+    name, avatar: pickedAvatar($('#fr-avatar-grid'), $('#fr-avatar')), sign: $('#fr-sign').value.trim(),
+    persona: $('#fr-persona').value.trim(), project: $('#fr-project').value, model: $('#fr-model').value,
+  };
+  const res = await fetch('/api/friends', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const f = await res.json();
+  if (f.error) { alert(f.error); return; }
+  closeFriendModal();
+  ['#fr-name', '#fr-avatar', '#fr-sign', '#fr-persona'].forEach(s => $(s).value = '');
+  loadFriends();
+}
+
+/* 我的资料 */
+async function loadProfile() {
+  try { ME = await (await fetch('/api/profile')).json(); } catch (e) {}
+  renderMe();
+}
+function renderMe() {
+  $('#uname').textContent = ME.name || '我';
+  $('#me-avatar').innerHTML = avatarHtml(ME.avatar);
+}
+function openProfileModal() {
+  $('#pf-name').value = ME.name || '';
+  $('#pf-avatar').value = avatarSvg(ME.avatar) ? '' : (ME.avatar || '');
+  buildAvatarGrid($('#pf-avatar-grid'), avatarSvg(ME.avatar) ? ME.avatar : 'qq1');
+  $('#profile-mask').classList.add('show');
+  $('#pf-name').focus();
+}
+function closeProfileModal() { $('#profile-mask').classList.remove('show'); }
+async function saveProfile() {
+  const body = { name: $('#pf-name').value.trim(), avatar: pickedAvatar($('#pf-avatar-grid'), $('#pf-avatar')) };
+  const res = await fetch('/api/profile', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  ME = await res.json();
+  renderMe();
+  closeProfileModal();
+}
+function fillProjectSelect(sel) {
+  sel.innerHTML = '';
+  for (const p of CONFIG.projects) {
+    const o = document.createElement('option');
+    o.value = p.name; o.textContent = `${p.name} — ${p.path}`;
+    if (!p.exists) o.disabled = true;
+    sel.appendChild(o);
+  }
+}
+function fillModelSelect(sel) {
+  sel.innerHTML = '';
+  for (const m of CONFIG.models || ['sonnet']) {
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    if (m === CONFIG.default_model) o.selected = true;
+    sel.appendChild(o);
+  }
 }
 async function loadTasks() {
   TASKS = await (await fetch('/api/tasks')).json();
   renderTaskList();
 }
+function taskItemHtml(t) {
+  return `<div class="task-item${t.id === currentTaskId ? ' active' : ''}" data-openchat="${t.id}" title="${esc(t.title)}">
+    <span class="t-ava">${avatarHtml(t.agent_avatar)}</span>
+    <span class="t-dot ${t.status}"></span>
+    <span class="t-title">${esc(t.title)}</span>
+    <span class="t-acts">
+      <span class="t-pin" data-pinchat="${t.id}" title="${t.pinned ? '取消置顶' : '置顶'}">${t.pinned ? '📌' : '📍'}</span>
+      <span class="t-del" data-delchat="${t.id}" title="删除聊天">✕</span>
+    </span>
+  </div>`;
+}
 function renderTaskList(filter) {
-  const box = $('#task-list'); box.innerHTML = '';
-  for (const t of TASKS) {
-    if (filter && !t.title.includes(filter)) continue;
-    const d = document.createElement('div');
-    d.className = 'task-item' + (t.id === currentTaskId ? ' active' : '');
-    d.innerHTML = `<span class="t-dot ${t.status}"></span><span class="t-title">${esc(t.title)}</span>`;
-    d.onclick = () => openTask(t.id);
-    box.appendChild(d);
-  }
+  const show = t => !filter || (t.title || '').includes(filter);
+  $('#pinned-list').innerHTML = TASKS.filter(t => t.pinned && show(t)).map(taskItemHtml).join('');
+  $('#task-list').innerHTML = TASKS.filter(t => !t.pinned && show(t)).map(taskItemHtml).join('');
+}
+async function togglePinChat(id) {
+  const t = TASKS.find(x => x.id === id); if (!t) return;
+  const res = await fetch(`/api/tasks/${id}/pin`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ pinned: !t.pinned }) });
+  const nt = await res.json(); if (nt.error) return;
+  t.pinned = nt.pinned; renderTaskList($('#search-input').value.trim());
+}
+async function deleteChat(id) {
+  if (!confirm('删除这条聊天信息？（不可恢复）')) return;
+  await fetch(`/api/tasks/${id}/delete`, { method: 'POST' });
+  TASKS = TASKS.filter(x => x.id !== id);
+  if (currentTaskId === id) { currentTaskId = null; if (es) { es.close(); es = null; } msgContainer().innerHTML = '<div id="empty-state"><div class="big">🐧</div><p>选一条聊天信息，或点右边好友开聊～</p></div>'; $('#chat-title').textContent = '欢迎使用'; }
+  renderTaskList($('#search-input').value.trim());
 }
 function setTaskStatus(id, status) {
   const t = TASKS.find(x => x.id === id);
@@ -704,8 +1186,15 @@ function setTaskStatus(id, status) {
   $('#stop-btn').classList.toggle('show', status === 'running');
 }
 function openTask(id) {
+  showView('chat');
   currentTaskId = id;
   const t = TASKS.find(x => x.id === id);
+  // 当前对话的对方身份:优先任务自带的 agent，其次从标题里取名字
+  currentAgent = {
+    name: (t && t.agent_name) || (t ? (t.title || '').replace(/^💬\s*/, '') : '') || 'Claude',
+    avatar: (t && t.agent_avatar) || 'qq1',
+  };
+  $('#chat-avatar').innerHTML = avatarHtml(currentAgent.avatar);
   $('#chat-title').textContent = t ? t.title : '';
   $('#win-title').textContent = `Claude Code 2007 - ${t ? t.title : ''}`;
   $('#chat-meta').textContent = t && t.model ? `模型 ${t.model}` : '';
@@ -728,9 +1217,10 @@ function openTask(id) {
 }
 
 /* ================= 交互 ================= */
-function openNewTaskModal(projectName) {
+function openNewTaskModal(projectName, prefillPrompt) {
   $('#modal-mask').classList.add('show');
   if (projectName) $('#f-project').value = projectName;
+  if (prefillPrompt) $('#f-prompt').value = prefillPrompt;
   $('#f-prompt').focus();
 }
 function closeModal() { $('#modal-mask').classList.remove('show'); }
@@ -758,7 +1248,13 @@ let sending = false;
 async function sendMessage() {
   if (sending) return;
   const text = $('#prompt').value.trim();
-  if (!text || !currentTaskId) return;
+  if (!text) return;
+  if (!currentTaskId) {
+    // 还没有打开任务：把这句话带进「新建任务」，避免点了发送却毫无反应
+    openNewTaskModal(null, text);
+    $('#prompt').value = '';
+    return;
+  }
   sending = true; $('#send-btn').disabled = true;
   try {
     const res = await fetch(`/api/tasks/${currentTaskId}/message`, {
@@ -775,11 +1271,48 @@ document.addEventListener('click', e => {
   const act = e.target.closest('[data-act]');
   if (act) {
     const a = act.dataset.act;
-    if (a === 'new') openNewTaskModal();
-    else if (a === 'chat') { if (TASKS[0]) openTask(TASKS[0].id); else openNewTaskModal(); }
-    else if (a === 'todo') addSysLine('🚧 该功能敬请期待（v2）');
+    if (a === 'addfriend') openFriendModal();
+    else if (a === 'new') openNewTaskModal();
+    else if (a === 'chat') { showView('chat'); if (TASKS[0]) openTask(TASKS[0].id); }
+    else if (a === 'sched') showView('sched');
+    else if (a === 'md') showView('md');
+    else if (a === 'plugins') showView('plugins');
+    else if (a === 'skills') showView('skills');
+    else if (a === 'games') showView('games');
+    else if (a === 'qzone') showView('qzone');
+    else if (a === 'todo') { showView('chat'); addSysLine('🚧 该功能敬请期待（v2）'); }
     return;
   }
+  // 点好友 = 跟该人设开聊
+  const df = e.target.closest('[data-delfriend]');
+  if (df) { e.stopPropagation(); deleteFriend(df.dataset.delfriend); return; }
+  const fr = e.target.closest('[data-friend]');
+  if (fr) { startFriendChat(FRIEND_LIST[+fr.dataset.friend]); return; }
+  // 聊天信息:打开 / 置顶 / 删除
+  const pc = e.target.closest('[data-pinchat]');
+  if (pc) { e.stopPropagation(); togglePinChat(pc.dataset.pinchat); return; }
+  const dc = e.target.closest('[data-delchat]');
+  if (dc) { e.stopPropagation(); deleteChat(dc.dataset.delchat); return; }
+  const oc = e.target.closest('[data-openchat]');
+  if (oc) { openTask(oc.dataset.openchat); return; }
+  // 我的 skill
+  const es2 = e.target.closest('[data-editskill]');
+  if (es2) { editSkill(es2.dataset.editskill); return; }
+  const ds = e.target.closest('[data-delskill]');
+  if (ds) { deleteSkill(ds.dataset.delskill); return; }
+  const gc = e.target.closest('[data-game]');
+  if (gc) { launchGame(gc.dataset.game); return; }
+  const lm = e.target.closest('[data-likemoment]');
+  if (lm) { likeMoment(lm.dataset.likemoment); return; }
+  const dm = e.target.closest('[data-delmoment]');
+  if (dm) { delMoment(dm.dataset.delmoment); return; }
+  // 定时任务卡片操作
+  const sw = e.target.closest('[data-sw]');
+  if (sw) { toggleSchedule(sw.dataset.sw, !sw.classList.contains('on')); return; }
+  const run = e.target.closest('[data-run]');
+  if (run) { runSchedule(run.dataset.run); return; }
+  const del = e.target.closest('[data-del]');
+  if (del) { deleteSchedule(del.dataset.del); return; }
   const copy = e.target.closest('.cb-copy');
   if (copy) {
     navigator.clipboard.writeText(copy.dataset.code).then(() => {
@@ -800,6 +1333,11 @@ document.addEventListener('click', e => {
   }
   if (!e.target.closest('#emoji-panel') && !e.target.closest('#emoji-btn'))
     $('#emoji-panel').classList.remove('show');
+  if (!e.target.closest('#slash-pop') && !e.target.closest('#slash-btn') &&
+      !['prompt', 'f-prompt', 's-prompt'].includes(e.target.id))
+    slashClose();
+  if (!e.target.closest('#attach-pop') && !e.target.closest('#attach-btn'))
+    closeAttachPop();
 });
 
 $('#send-btn').onclick = sendMessage;
@@ -817,8 +1355,617 @@ $('#stop-btn').onclick = async () => {
 };
 $('#search-input').addEventListener('input', e => renderTaskList(e.target.value.trim()));
 
+/* ================= 斜杠命令自动补全 ================= */
+async function loadSlash() {
+  try { SLASH = await (await fetch('/api/slashcommands')).json(); }
+  catch (e) { SLASH = []; }
+}
+const slashPop = $('#slash-pop');
+let slashState = { ta: null, items: [], active: 0, open: false };
+
+function slashClose() { slashPop.classList.remove('show'); slashState.open = false; slashState.ta = null; }
+function slashQuery(ta) {
+  // 只有当整条消息以 "/" 开头、且还没敲空格时，才把 "/" 后面的词当查询
+  const m = ta.value.match(/^\/([a-z0-9:_-]*)$/i);
+  return m ? m[1].toLowerCase() : null;
+}
+function slashFilter(q) {
+  if (!q) return SLASH.slice(0, 50);
+  return SLASH.filter(c => c.name.toLowerCase().includes(q))
+    .sort((a, b) => (a.name.toLowerCase().startsWith(q) ? 0 : 1) - (b.name.toLowerCase().startsWith(q) ? 0 : 1))
+    .slice(0, 50);
+}
+function slashRender() {
+  const { items, active } = slashState;
+  if (!items.length) { slashClose(); return; }
+  slashPop.innerHTML = '<div class="sp-hd">斜杠命令 · ↑↓ 选择 · Enter/Tab 采用 · Esc 关闭</div>' +
+    items.map((c, i) => `<div class="sp-item${i === active ? ' active' : ''}" data-i="${i}">` +
+      `<span class="sp-name">/${esc(c.name)}</span><span class="sp-desc">${esc(c.desc || '')}</span></div>`).join('');
+  slashPop.classList.add('show');
+  const act = slashPop.querySelector('.sp-item.active');
+  if (act) act.scrollIntoView({ block: 'nearest' });
+}
+function slashPosition(ta) {
+  const r = ta.getBoundingClientRect();
+  slashPop.style.left = r.left + 'px';
+  slashPop.style.top = '-9999px';
+  slashPop.classList.add('show');
+  requestAnimationFrame(() => { slashPop.style.top = (r.top - slashPop.offsetHeight - 4) + 'px'; });
+}
+function slashOpenFor(ta, forceAll) {
+  const q = forceAll ? '' : slashQuery(ta);
+  if (q === null) { slashClose(); return; }
+  slashState.ta = ta; slashState.items = slashFilter(q); slashState.active = 0; slashState.open = true;
+  slashRender(); slashPosition(ta);
+}
+function slashAccept() {
+  const c = slashState.items[slashState.active], ta = slashState.ta;
+  if (!c || !ta) return;
+  ta.value = '/' + c.name + ' '; ta.focus();
+  const end = ta.value.length; ta.setSelectionRange(end, end);
+  slashClose();
+}
+function slashKeydown(e) {
+  if (!slashState.open) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); slashState.active = (slashState.active + 1) % slashState.items.length; slashRender(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); slashState.active = (slashState.active - 1 + slashState.items.length) % slashState.items.length; slashRender(); }
+  else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); slashAccept(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); slashClose(); }
+}
+function attachSlash(ta) {
+  ta.addEventListener('keydown', slashKeydown, true);  // 捕获阶段，先于 Ctrl+Enter 发送
+  ta.addEventListener('input', () => { if (slashState.open || slashQuery(ta) !== null) slashOpenFor(ta); });
+  ta.addEventListener('blur', () => setTimeout(() => { if (!slashPop.matches(':hover')) slashClose(); }, 150));
+}
+slashPop.addEventListener('mousedown', e => {
+  const it = e.target.closest('.sp-item'); if (!it) return;
+  e.preventDefault(); slashState.active = +it.dataset.i; slashAccept();
+});
+attachSlash($('#prompt'));
+attachSlash($('#f-prompt'));
+attachSlash($('#s-prompt'));
+$('#slash-btn').addEventListener('mousedown', e => e.preventDefault());
+$('#slash-btn').addEventListener('click', () => { const ta = $('#prompt'); ta.focus(); slashOpenFor(ta, true); });
+
+/* ================= 附加:允许 Claude 访问的目录（--add-dir） ================= */
+const attachPop = $('#attach-pop');
+function currentTask() { return TASKS.find(t => t.id === currentTaskId); }
+function renderAttachPop() {
+  const t = currentTask();
+  if (!t) { attachPop.innerHTML = '<div class="ap-hd">先打开或新建一个任务，才能设置它可访问的目录。</div>'; return; }
+  const dirs = t.add_dirs || [];
+  const quick = (CONFIG.projects || []).map(p => p.abspath).filter(d => d && d !== t.cwd && !dirs.includes(d));
+  attachPop.innerHTML =
+    '<div class="ap-hd">本任务里 Claude 可访问的目录（额外授权 --add-dir）：</div>' +
+    `<div class="ap-row"><span class="ap-path ap-cwd" title="${esc(t.cwd)}">📁 ${esc(t.cwd)}</span><span style="font-size:10px;color:#8aa">主目录</span></div>` +
+    dirs.map(d => `<div class="ap-row"><span class="ap-path" title="${esc(d)}">➕ ${esc(d)}</span><span class="ap-rm" data-rmdir="${esc(d)}" title="移除">✕</span></div>`).join('') +
+    (quick.length ? '<div class="ap-quick">' + quick.map(d => `<span class="ap-chip" data-adddir="${esc(d)}">+ ${esc(d.split('/').pop() || d)}</span>`).join('') + '</div>' : '') +
+    '<div class="ap-add"><input id="ap-input" placeholder="输入/粘贴目录路径，支持 ~"><button class="mini-btn" id="ap-add-btn">添加</button></div>';
+}
+function openAttachPop() {
+  renderAttachPop();
+  const r = $('#attach-btn').getBoundingClientRect();
+  attachPop.style.left = r.left + 'px';
+  attachPop.style.top = '-9999px';
+  attachPop.classList.add('show');
+  requestAnimationFrame(() => { attachPop.style.top = (r.top - attachPop.offsetHeight - 6) + 'px'; });
+}
+function closeAttachPop() { attachPop.classList.remove('show'); }
+async function attachDirApi(action, path) {
+  if (!path || !currentTaskId) return;
+  const res = await fetch(`/api/tasks/${currentTaskId}/${action}`, {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path }) });
+  const t = await res.json();
+  if (t.error) { alert(t.error); return; }
+  const i = TASKS.findIndex(x => x.id === t.id); if (i >= 0) TASKS[i] = t;
+  renderAttachPop();
+}
+$('#attach-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  attachPop.classList.contains('show') ? closeAttachPop() : openAttachPop();
+});
+attachPop.addEventListener('click', (e) => {
+  const rm = e.target.closest('[data-rmdir]'); if (rm) { attachDirApi('rmdir', rm.dataset.rmdir); return; }
+  const ad = e.target.closest('[data-adddir]'); if (ad) { attachDirApi('adddir', ad.dataset.adddir); return; }
+  if (e.target.closest('#ap-add-btn')) { const inp = $('#ap-input'); attachDirApi('adddir', inp.value.trim()); inp.value = ''; }
+});
+attachPop.addEventListener('keydown', (e) => {
+  if (e.target.id === 'ap-input' && e.key === 'Enter') { e.preventDefault(); attachDirApi('adddir', e.target.value.trim()); e.target.value = ''; }
+});
+
+/* ================= 视图切换 ================= */
+function showView(name) {
+  const chat = name === 'chat';
+  $('#chat-hd').style.display = chat ? '' : 'none';
+  $('#messages').style.display = chat ? '' : 'none';
+  $('#input-area').style.display = chat ? '' : 'none';
+  $('#sched-view').classList.toggle('show', name === 'sched');
+  $('#md-view').classList.toggle('show', name === 'md');
+  $('#plugins-view').classList.toggle('show', name === 'plugins');
+  $('#skills-view').classList.toggle('show', name === 'skills');
+  $('#games-view').classList.toggle('show', name === 'games');
+  $('#qzone-view').classList.toggle('show', name === 'qzone');
+  if (name !== 'games') gameHall();   // 离开就停掉正在跑的游戏
+  if (name === 'sched') loadSchedules();
+  else if (name === 'md') loadClaudeMd($('#md-project').value);
+  else if (name === 'plugins') loadCapabilities();
+  else if (name === 'skills') loadSkills();
+  else if (name === 'games') gameHall();
+  else if (name === 'qzone') loadMoments();
+}
+
+/* ================= QQ空间 动态 ================= */
+async function loadMoments() {
+  $('#qz-me').innerHTML = `<span class="qz-ava" style="width:22px;height:22px">${avatarHtml(ME.avatar)}</span>${esc(ME.name)} 的空间`;
+  const list = await (await fetch('/api/moments')).json();
+  $('#qz-feed').innerHTML = list.map(m => `<div class="qz-item">
+      <div class="qz-ava">${avatarHtml(m.author_avatar)}</div>
+      <div class="qz-main">
+        <div class="qz-name">${esc(m.author_name)}${m.mine ? '<span class="me-tag">我</span>' : ''}</div>
+        <div class="qz-text">${esc(m.text)}</div>
+        <div class="qz-foot">
+          <span>${qzTime(m.ts)}</span>
+          <span class="qz-act" data-likemoment="${m.id}">👍 赞 ${m.likes || 0}</span>
+          ${m.mine ? `<span class="qz-act qz-del" data-delmoment="${m.id}">🗑 删除</span>` : ''}
+        </div>
+      </div>
+    </div>`).join('') || '<div class="cap-empty">还没有动态，发一条吧～</div>';
+}
+function qzTime(ts) {
+  const diff = Date.now() / 1000 - ts;
+  if (diff < 60) return '刚刚';
+  if (diff < 3600) return (diff / 60 | 0) + ' 分钟前';
+  if (diff < 86400) return (diff / 3600 | 0) + ' 小时前';
+  return fmtDateTime(ts);
+}
+async function postMoment() {
+  const text = $('#qz-text').value.trim();
+  if (!text) return;
+  const res = await fetch('/api/moments', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text }) });
+  const r = await res.json();
+  if (r.error) { alert(r.error); return; }
+  $('#qz-text').value = ''; loadMoments();
+}
+async function likeMoment(id) {
+  await fetch(`/api/moments/${id}/like`, { method: 'POST' }); loadMoments();
+}
+async function delMoment(id) {
+  if (!confirm('删除这条动态？')) return;
+  await fetch(`/api/moments/${id}/delete`, { method: 'POST' }); loadMoments();
+}
+
+/* ================= QQ小游戏 ================= */
+let gameTeardown = null;
+function gameHall() {
+  if (gameTeardown) { gameTeardown(); gameTeardown = null; }
+  $('#game-menu').style.display = '';
+  $('#game-stage').style.display = 'none';
+  $('#game-stage').innerHTML = '';
+  $('#game-back').style.display = 'none';
+  $('#game-score').textContent = '';
+}
+function launchGame(id) {
+  if (gameTeardown) { gameTeardown(); gameTeardown = null; }
+  $('#game-menu').style.display = 'none';
+  const stage = $('#game-stage'); stage.style.display = 'flex'; stage.innerHTML = '';
+  $('#game-back').style.display = '';
+  gameTeardown = ({ snake: gameSnake, g2048: game2048, memory: gameMemory }[id] || (() => {}))(stage);
+}
+function setScore(s) { $('#game-score').textContent = s; }
+
+/* —— 贪吃蛇 —— */
+function gameSnake(stage) {
+  const N = 17, CELL = 20, W = N * CELL;
+  const c = document.createElement('canvas'); c.width = W; c.height = W;
+  const hint = document.createElement('div'); hint.className = 'game-hint'; hint.textContent = '方向键 / WASD 控制，空格重开';
+  stage.append(c, hint);
+  const ctx = c.getContext('2d');
+  let snake, dir, nextDir, food, score, dead, timer;
+  function reset() {
+    snake = [{ x: 8, y: 8 }, { x: 7, y: 8 }, { x: 6, y: 8 }];
+    dir = { x: 1, y: 0 }; nextDir = dir; score = 0; dead = false; placeFood(); setScore('得分 0');
+  }
+  function placeFood() {
+    do { food = { x: (Math.random() * N) | 0, y: (Math.random() * N) | 0 }; }
+    while (snake.some(s => s.x === food.x && s.y === food.y));
+  }
+  function step() {
+    if (dead) return;
+    dir = nextDir;
+    const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+    if (head.x < 0 || head.y < 0 || head.x >= N || head.y >= N || snake.some(s => s.x === head.x && s.y === head.y)) {
+      dead = true; draw(); return;
+    }
+    snake.unshift(head);
+    if (head.x === food.x && head.y === food.y) { score += 10; setScore('得分 ' + score); placeFood(); }
+    else snake.pop();
+    draw();
+  }
+  function draw() {
+    ctx.fillStyle = '#eaf3d0'; ctx.fillRect(0, 0, W, W);
+    ctx.fillStyle = '#e5533c'; ctx.beginPath();
+    ctx.arc(food.x * CELL + CELL / 2, food.y * CELL + CELL / 2, CELL / 2 - 2, 0, 7); ctx.fill();
+    snake.forEach((s, i) => {
+      ctx.fillStyle = i === 0 ? '#1b5cc8' : '#4b8ae8';
+      ctx.fillRect(s.x * CELL + 1, s.y * CELL + 1, CELL - 2, CELL - 2);
+    });
+    if (dead) {
+      ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, 0, W, W);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('游戏结束  得分 ' + score, W / 2, W / 2 - 6);
+      ctx.font = '13px sans-serif'; ctx.fillText('按空格重开', W / 2, W / 2 + 20);
+    }
+  }
+  const key = e => {
+    const m = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0], w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0] };
+    if (e.key === ' ') { if (dead) reset(); e.preventDefault(); return; }
+    const v = m[e.key]; if (!v) return;
+    e.preventDefault();
+    if (v[0] === -dir.x && v[1] === -dir.y) return;   // 不能反向
+    nextDir = { x: v[0], y: v[1] };
+  };
+  window.addEventListener('keydown', key);
+  reset(); draw();
+  timer = setInterval(step, 120);
+  return () => { clearInterval(timer); window.removeEventListener('keydown', key); };
+}
+
+/* —— 2048 —— */
+function game2048(stage) {
+  const grid = document.createElement('div'); grid.className = 'g2048';
+  const hint = document.createElement('div'); hint.className = 'game-hint'; hint.textContent = '方向键移动合并，R 重开';
+  stage.append(grid, hint);
+  let board, score, over;
+  const COLORS = { 2: '#eee4da', 4: '#ede0c8', 8: '#f2b179', 16: '#f59563', 32: '#f67c5f', 64: '#f65e3b', 128: '#edcf72', 256: '#edcc61', 512: '#edc850', 1024: '#edc53f', 2048: '#edc22e' };
+  function reset() { board = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; score = 0; over = false; add(); add(); draw(); }
+  function add() {
+    const empty = board.map((v, i) => v ? -1 : i).filter(i => i >= 0);
+    if (!empty.length) return;
+    board[empty[(Math.random() * empty.length) | 0]] = Math.random() < 0.9 ? 2 : 4;
+  }
+  function draw() {
+    grid.innerHTML = board.map(v => {
+      const bg = v ? (COLORS[v] || '#3c3a32') : '#cdc1b4';
+      const col = v <= 4 ? '#776e65' : '#f9f6f2';
+      return `<div class="cell" style="background:${bg};color:${col};font-size:${v > 512 ? 18 : 22}px">${v || ''}</div>`;
+    }).join('');
+    setScore('得分 ' + score + (over ? ' · 结束(按R重开)' : ''));
+  }
+  function slide(row) {
+    let a = row.filter(x => x);
+    for (let i = 0; i < a.length - 1; i++) if (a[i] === a[i + 1]) { a[i] *= 2; score += a[i]; a[i + 1] = 0; }
+    a = a.filter(x => x);
+    while (a.length < 4) a.push(0);
+    return a;
+  }
+  function move(dir) {
+    if (over) return;
+    const before = board.join(',');
+    let rows = [];
+    for (let r = 0; r < 4; r++) {
+      let idx = [0, 1, 2, 3].map(cc => dir === 'L' || dir === 'R' ? r * 4 + cc : cc * 4 + r);
+      if (dir === 'R' || dir === 'D') idx.reverse();
+      let row = idx.map(i => board[i]);
+      row = slide(row);
+      idx.forEach((i, k) => board[i] = row[k]);
+    }
+    if (board.join(',') !== before) { add(); if (!canMove()) over = true; }
+    draw();
+  }
+  function canMove() {
+    if (board.includes(0)) return true;
+    for (let r = 0; r < 4; r++) for (let cc = 0; cc < 4; cc++) {
+      const i = r * 4 + cc;
+      if (cc < 3 && board[i] === board[i + 1]) return true;
+      if (r < 3 && board[i] === board[i + 4]) return true;
+    }
+    return false;
+  }
+  const key = e => {
+    const m = { ArrowLeft: 'L', ArrowRight: 'R', ArrowUp: 'U', ArrowDown: 'D' };
+    if (e.key === 'r' || e.key === 'R') { reset(); return; }
+    if (!m[e.key]) return; e.preventDefault(); move(m[e.key]);
+  };
+  window.addEventListener('keydown', key);
+  reset();
+  return () => window.removeEventListener('keydown', key);
+}
+
+/* —— 翻牌记忆 —— */
+function gameMemory(stage) {
+  const board = document.createElement('div'); board.className = 'memory';
+  const hint = document.createElement('div'); hint.className = 'game-hint'; hint.textContent = '翻开两张相同的配对';
+  stage.append(board, hint);
+  const EMO = ['🐧', '🐱', '🐶', '🦊', '🐼', '🐸', '🦄', '🐷'];
+  let deck = [...EMO, ...EMO].sort(() => Math.random() - 0.5);
+  let flipped = [], matched = 0, lock = false, moves = 0;
+  board.innerHTML = deck.map((e, i) => `<div class="card" data-i="${i}">${e}</div>`).join('');
+  setScore('步数 0');
+  const onClick = ev => {
+    const card = ev.target.closest('.card'); if (!card || lock) return;
+    const i = +card.dataset.i;
+    if (card.classList.contains('flip') || card.classList.contains('done')) return;
+    card.classList.add('flip'); flipped.push(card);
+    if (flipped.length === 2) {
+      moves++; setScore('步数 ' + moves); lock = true;
+      const [a, b] = flipped;
+      if (deck[+a.dataset.i] === deck[+b.dataset.i]) {
+        setTimeout(() => { a.classList.add('done'); b.classList.add('done'); a.classList.remove('flip'); b.classList.remove('flip'); flipped = []; lock = false; matched += 2; if (matched === deck.length) setScore('🎉 通关！步数 ' + moves); }, 350);
+      } else {
+        setTimeout(() => { a.classList.remove('flip'); b.classList.remove('flip'); flipped = []; lock = false; }, 700);
+      }
+    }
+  };
+  board.addEventListener('click', onClick);
+  return () => board.removeEventListener('click', onClick);
+}
+
+/* ================= 我的 skill 管理 ================= */
+let editingSkillDir = null;
+async function loadSkills() {
+  const list = await (await fetch('/api/skills')).json();
+  const box = $('#skills-list');
+  if (!list.length) {
+    box.innerHTML = '<div class="sched-empty">🛠️ 还没有 skill。点右上角「＋ 新建 skill」，<br>写好后 Claude 会在合适的时候自动调用它。</div>';
+    return;
+  }
+  box.innerHTML = list.map(s => `<div class="sched-card">
+      <div class="sc-top">
+        <span class="sc-title">${esc(s.name)}</span>
+        <span class="sc-when" style="color:#8aa">${esc(s.dir)}</span>
+        <div class="sc-acts">
+          <button class="mini-btn" data-editskill="${esc(s.dir)}">✎ 编辑</button>
+          <button class="mini-btn danger" data-delskill="${esc(s.dir)}">删除</button>
+        </div>
+      </div>
+      <div class="sc-prompt">${esc(s.description || '（无说明）')}</div>
+    </div>`).join('');
+}
+function openSkillModal() {
+  editingSkillDir = null;
+  $('#skill-mtitle').textContent = '🛠️ 新建 skill';
+  $('#sk-name').disabled = false;
+  $('#sk-name').value = ''; $('#sk-desc').value = ''; $('#sk-body').value = '';
+  $('#skill-mask').classList.add('show');
+  $('#sk-name').focus();
+}
+async function editSkill(dir) {
+  const s = await (await fetch('/api/skills/' + encodeURIComponent(dir))).json();
+  if (s.error) { alert(s.error); return; }
+  editingSkillDir = dir;
+  $('#skill-mtitle').textContent = '🛠️ 编辑 skill';
+  $('#sk-name').value = s.name; $('#sk-name').disabled = true;   // 名称不改（对应目录）
+  $('#sk-desc').value = s.description || ''; $('#sk-body').value = s.body || '';
+  $('#skill-mask').classList.add('show');
+  $('#sk-desc').focus();
+}
+function closeSkillModal() { $('#skill-mask').classList.remove('show'); }
+async function saveSkill() {
+  const desc = $('#sk-desc').value.trim(), bodyText = $('#sk-body').value;
+  let res;
+  if (editingSkillDir) {
+    res = await fetch(`/api/skills/${encodeURIComponent(editingSkillDir)}/save`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ description: desc, body: bodyText }) });
+  } else {
+    const name = $('#sk-name').value.trim();
+    if (!name) { $('#sk-name').focus(); return; }
+    res = await fetch('/api/skills', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name, description: desc, body: bodyText }) });
+  }
+  const r = await res.json();
+  if (r.error) { alert(r.error); return; }
+  closeSkillModal(); loadSkills();
+}
+async function deleteSkill(dir) {
+  if (!confirm(`删除 skill「${dir}」？会删掉 ~/.claude/skills/${dir} 整个目录，不可恢复。`)) return;
+  await fetch(`/api/skills/${encodeURIComponent(dir)}/delete`, { method: 'POST' });
+  loadSkills();
+}
+
+/* ================= 插件 / 能力面板 ================= */
+async function loadCapabilities() {
+  const c = await (await fetch('/api/capabilities')).json();
+  const body = $('#plugins-body'), meta = $('#plugins-meta');
+  if (!c || !c.updated_at) {
+    meta.textContent = '';
+    body.innerHTML = '<div class="cap-empty">🧩 还没抓到能力信息。<br>随便跑一个任务（新建任务里发一句），这里就会自动列出你本机的 MCP / 技能 / 子代理 / 插件。</div>';
+    return;
+  }
+  meta.textContent = `Claude Code ${c.version || ''} · 更新于 ${fmtDateTime(c.updated_at)}`;
+  const statusClass = s => s === 'connected' ? 'ok' : (s === 'pending' || s === 'needs-auth') ? 'wait' : (s ? 'err' : '');
+  const sec = (icon, title, n, inner) =>
+    `<div class="cap-sec"><div class="cap-hd">${icon} ${title}<span class="cap-n">(${n})</span></div><div class="cap-grid">${inner}</div></div>`;
+  const chips = arr => (arr && arr.length)
+    ? arr.map(x => `<span class="cap-chip">${esc(x)}</span>`).join('')
+    : '<span class="cap-empty" style="padding:6px">（无）</span>';
+  const mcp = (c.mcp_servers || []);
+  const mcpChips = mcp.length
+    ? mcp.map(m => `<span class="cap-chip"><span class="dot ${statusClass(m.status)}"></span>${esc(m.name)} <span style="color:#8aa;font-size:11px">${esc(m.status||'')}</span></span>`).join('')
+    : '<span class="cap-empty" style="padding:6px">（无）</span>';
+  body.innerHTML =
+    sec('🔌', 'MCP 服务器', mcp.length, mcpChips) +
+    sec('🛠️', '技能 Skills', (c.skills||[]).length, chips(c.skills)) +
+    sec('🤝', '子代理 Agents', (c.agents||[]).length, chips(c.agents)) +
+    sec('🧩', '插件 Plugins', (c.plugins||[]).length, chips(c.plugins)) +
+    sec('⚡', '斜杠命令', c.slash_count || 0, `<span class="cap-chip">共 ${c.slash_count||0} 个（输入框打 / 可补全）</span>`);
+}
+
+/* ================= 定时任务 ================= */
+function fmtDateTime(ts) {
+  const d = new Date(ts * 1000);
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function schedWhen(s) {
+  if (s.sched_type === 'daily') return `每天 ${s.at_time}`;
+  if (s.sched_type === 'interval') return `每 ${s.interval_min} 分钟`;
+  if (s.sched_type === 'once') return `一次性 ${s.at_datetime ? fmtDateTime(s.at_datetime) : ''}`;
+  return '';
+}
+async function loadSchedules() {
+  const list = await (await fetch('/api/schedules')).json();
+  const box = $('#sched-list');
+  if (!list.length) {
+    box.innerHTML = '<div class="sched-empty">🐧 还没有定时任务。<br>点右上角「＋ 新建定时任务」，让 Claude 按点自动干活 ⏰</div>';
+    return;
+  }
+  box.innerHTML = list.map(s => {
+    const next = s.enabled && s.next_run ? `下次 ${fmtDateTime(s.next_run)}` : '已暂停';
+    const last = s.last_run ? ` · 上次 ${fmtDateTime(s.last_run)}` : '';
+    const err = s.last_error ? ` · <span style="color:#c0392b">${esc(s.last_error)}</span>` : '';
+    return `<div class="sched-card${s.enabled ? '' : ' off'}">
+      <div class="sc-top">
+        <span class="sc-title">${esc(s.title || s.prompt.slice(0,16))}</span>
+        <span class="sc-when">${esc(schedWhen(s))}</span>
+        <div class="sc-acts">
+          <div class="switch ${s.enabled ? 'on' : ''}" data-sw="${s.id}" title="启用/暂停"></div>
+          <button class="mini-btn" data-run="${s.id}">▶ 立即运行</button>
+          <button class="mini-btn danger" data-del="${s.id}">删除</button>
+        </div>
+      </div>
+      <div class="sc-meta">${esc(s.project || '(默认)')} · ${esc(s.model)} · ${esc(s.permission_mode)} · ${next}${last}${err}</div>
+      <div class="sc-prompt">${esc(s.prompt)}</div>
+    </div>`;
+  }).join('');
+}
+function openSchedModal() {
+  $('#sched-mask').classList.add('show');
+  syncSchedRows();
+  $('#s-prompt').focus();
+}
+function closeSchedModal() { $('#sched-mask').classList.remove('show'); }
+function syncSchedRows() {
+  const t = $('#s-type').value;
+  $('#s-row-time').style.display = t === 'daily' ? '' : 'none';
+  $('#s-row-interval').style.display = t === 'interval' ? '' : 'none';
+  $('#s-row-once').style.display = t === 'once' ? '' : 'none';
+}
+async function createSchedule() {
+  const prompt = $('#s-prompt').value.trim();
+  if (!prompt) { $('#s-prompt').focus(); return; }
+  const t = $('#s-type').value;
+  const body = {
+    title: $('#s-title').value.trim(), project: $('#s-project').value,
+    model: $('#s-model').value, permission_mode: $('#s-perm').value, prompt, sched_type: t,
+  };
+  if (t === 'daily') body.at_time = $('#s-time').value || '09:00';
+  else if (t === 'interval') body.interval_min = +$('#s-interval').value || 60;
+  else if (t === 'once') {
+    const v = $('#s-datetime').value;
+    if (!v) { alert('请选择运行时间'); return; }
+    body.at_datetime = new Date(v).getTime() / 1000;
+  }
+  const res = await fetch('/api/schedules', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const r = await res.json();
+  if (r.error) { alert(r.error); return; }
+  closeSchedModal(); $('#s-title').value = ''; $('#s-prompt').value = '';
+  loadSchedules();
+}
+async function toggleSchedule(id, enabled) {
+  await fetch(`/api/schedules/${id}/toggle`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ enabled }) });
+  loadSchedules();
+}
+async function runSchedule(id) {
+  const res = await fetch(`/api/schedules/${id}/run`, { method: 'POST' });
+  const r = await res.json();
+  if (r.error) { alert(r.error); return; }
+  if (r.id) { await loadTasks(); openTask(r.id); }   // 直接跳到刚触发的任务
+}
+async function deleteSchedule(id) {
+  if (!confirm('删除这个定时任务？')) return;
+  await fetch(`/api/schedules/${id}/delete`, { method: 'POST' });
+  loadSchedules();
+}
+
+/* ================= CLAUDE.md 编辑 ================= */
+async function loadClaudeMd(project) {
+  if (!project) return;
+  const r = await (await fetch('/api/claudemd?project=' + encodeURIComponent(project))).json();
+  $('#md-path').textContent = r.path + (r.exists ? '' : '（尚不存在，保存后创建）');
+  $('#md-editor').value = r.content || '';
+}
+async function saveClaudeMd() {
+  const body = { project: $('#md-project').value, content: $('#md-editor').value };
+  const res = await fetch('/api/claudemd', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const r = await res.json();
+  if (r.error) { alert(r.error); return; }
+  const btn = $('#md-save-btn'), old = btn.textContent;
+  btn.textContent = '✔ 已保存'; setTimeout(() => btn.textContent = old, 1500);
+  $('#md-path').textContent = r.path;
+}
+
+$('#sched-new-btn').onclick = openSchedModal;
+$('#s-ok').onclick = createSchedule;
+$('#s-cancel').onclick = closeSchedModal;
+$('#sm-close').onclick = closeSchedModal;
+$('#s-type').onchange = syncSchedRows;
+$('#md-project').onchange = () => loadClaudeMd($('#md-project').value);
+$('#md-reload-btn').onclick = () => loadClaudeMd($('#md-project').value);
+$('#md-save-btn').onclick = saveClaudeMd;
+$('#fr-ok').onclick = createFriend;
+$('#fr-cancel').onclick = closeFriendModal;
+$('#fr-close').onclick = closeFriendModal;
+$('#usercard').onclick = openProfileModal;
+$('#pf-ok').onclick = saveProfile;
+$('#pf-cancel').onclick = closeProfileModal;
+$('#pf-close').onclick = closeProfileModal;
+$('#skill-new-btn').onclick = openSkillModal;
+$('#sk-ok').onclick = saveSkill;
+$('#sk-cancel').onclick = closeSkillModal;
+$('#sk-close').onclick = closeSkillModal;
+$('#game-back').onclick = gameHall;
+$('#qz-send').onclick = postMoment;
+
+/* 无边框原生窗口(pywebview)时，标题栏按钮驱动真实窗口，并让 QQ 窗口铺满整窗 */
+const pwApi = () => (window.pywebview && window.pywebview.api) || null;
+function markNative() { document.documentElement.classList.add('native'); }
+if (window.pywebview) markNative();
+window.addEventListener('pywebviewready', markNative);
+
+let winMaximized = false;
+const RESTORE_W = 980, RESTORE_H = 760;
+async function maximizeWin() {
+  const a = pwApi(); if (!a) return;
+  const wa = await a.get_workarea();             // [x,y,w,h] 已是 move() 兼容坐标(避开菜单栏/Dock)
+  if (!wa) return;
+  a.set_bounds(wa[0], wa[1], wa[2], wa[3]);
+  winMaximized = true; $('#win-max').classList.add('restore');
+}
+async function restoreWin() {
+  const a = pwApi(); if (!a) return;
+  const wa = await a.get_workarea();
+  if (!wa) return;
+  const x = wa[0] + Math.max(0, (wa[2] - RESTORE_W) / 2);
+  const y = wa[1] + Math.max(0, (wa[3] - RESTORE_H) / 2);
+  a.set_bounds(x, y, RESTORE_W, RESTORE_H);
+  winMaximized = false; $('#win-max').classList.remove('restore');
+}
+$('#win-min').onclick = () => { const a = pwApi(); if (a) a.minimize(); };
+$('#win-max').onclick = () => { winMaximized ? restoreWin() : maximizeWin(); };
+$('#win-close').onclick = () => { const a = pwApi(); if (a) a.close(); else window.close(); };
+
+/* 标题栏拖动:只用鼠标坐标算窗口的绝对左上角(screenX/Y 与 move() 同为「左上原点」),
+   不读 window.x/y(mac 上有坐标系 bug)。用 rAF 合并,每帧最多调一次 move,避免刷爆 JS 桥。 */
+(() => {
+  const bar = $('#tb-drag');
+  let off = null, target = null, raf = 0;
+  function pump() {
+    if (!off) { raf = 0; return; }
+    if (target) { const a = pwApi(); if (a) a.move(target[0], target[1]); target = null; }
+    raf = requestAnimationFrame(pump);
+  }
+  bar.addEventListener('mousedown', (e) => {
+    if (!pwApi() || winMaximized || e.button !== 0) return;
+    off = { x: e.clientX, y: e.clientY };      // 鼠标在窗口内的偏移
+    if (!raf) raf = requestAnimationFrame(pump);
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (off) target = [e.screenX - off.x, e.screenY - off.y];
+  });
+  window.addEventListener('mouseup', () => { off = null; });
+  bar.addEventListener('dblclick', () => $('#win-max').click());  // 双击标题栏最大化/还原
+})();
+
 /* 表情面板 */
-const EMOJIS = ['😀','😂','😊','😎','🤔','😭','👍','👎','🙏','💪','🐧','🔥','✨','🎉','❤️','🚀','🐛','☕','😴','🤖','💡','⚠️','✅','❌'];
+const EMOJIS =['😀','😂','😊','😎','🤔','😭','👍','👎','🙏','💪','🐧','🔥','✨','🎉','❤️','🚀','🐛','☕','😴','🤖','💡','⚠️','✅','❌'];
 const ep = $('#emoji-panel');
 EMOJIS.forEach(em => {
   const s = document.createElement('span');
@@ -853,6 +2000,9 @@ setInterval(async () => {
 /* ================= 启动 ================= */
 (async () => {
   await loadConfig();
+  await loadSlash();
+  await loadProfile();
+  await loadFriends();
   await loadTasks();
   if (TASKS[0]) openTask(TASKS[0].id);
 })();

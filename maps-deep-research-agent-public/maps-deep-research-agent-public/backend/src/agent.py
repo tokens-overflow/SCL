@@ -112,9 +112,13 @@ class MapsDeepResearchAgent:
         language: str | None = None,
         max_tasks: int | None = None,
         location_hint: str | None = None,
+        budget: str | None = None,
+        travel_date: str | None = None,
     ) -> ResearchState:
         """同步端到端：事件全部丢弃，返回最终 state。"""
-        state = self._make_state(topic, language, max_tasks, location_hint)
+        state = self._make_state(
+            topic, language, max_tasks, location_hint, budget, travel_date
+        )
         await self._pipeline.execute(state, noop_emitter)
         return state
 
@@ -125,13 +129,17 @@ class MapsDeepResearchAgent:
         language: str | None = None,
         max_tasks: int | None = None,
         location_hint: str | None = None,
+        budget: str | None = None,
+        travel_date: str | None = None,
     ) -> AsyncIterator[Event]:
         """流式：把每个事件按发生顺序 yield 出来（FastAPI 侧推到 SSE）。
 
         模式：一个 producer 协程把事件塞进 asyncio.Queue，本生成器从队列消费
         并 yield，遇到 ``None`` sentinel 表示流结束。
         """
-        state = self._make_state(topic, language, max_tasks, location_hint)
+        state = self._make_state(
+            topic, language, max_tasks, location_hint, budget, travel_date
+        )
         queue: asyncio.Queue[Event | None] = asyncio.Queue()
 
         async def producer() -> None:
@@ -161,10 +169,14 @@ class MapsDeepResearchAgent:
         language: str | None,
         max_tasks: int | None,
         location_hint: str | None,
+        budget: str | None = None,
+        travel_date: str | None = None,
     ) -> ResearchState:
         return ResearchState(
             topic=topic,
             language=language or self._config.app.agent.default_language,  # type: ignore[arg-type]
             location_hint=location_hint,
             requested_max_tasks=max_tasks,
+            budget=budget,
+            travel_date=travel_date,
         )

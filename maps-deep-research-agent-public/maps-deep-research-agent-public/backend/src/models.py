@@ -42,6 +42,8 @@ class Place(BaseModel):
     phone: str | None = None
     photo_reference: str | None = None
     google_maps_url: str | None = None
+    editorial_summary: str | None = None  # Google 官方一句话简介
+    reviews: list[str] = Field(default_factory=list)  # 精选评价正文片段
 
 
 class RouteLeg(BaseModel):
@@ -99,6 +101,8 @@ class ResearchState(BaseModel):
     # ── 请求级覆盖（由 Agent 根据 HTTP 请求填入）──
     location_hint: str | None = None
     requested_max_tasks: int | None = None
+    budget: str | None = None
+    travel_date: str | None = None
     # ── 由各 stage 填入 ──
     started_at: float = Field(default_factory=time.time)
     finished_at: float | None = None
@@ -221,6 +225,12 @@ class ResearchRequest(BaseModel):
     location_hint: Optional[str] = Field(
         default=None,
         description="可选的位置锚点，例如 'Tokyo, Japan'，作为 Maps 查询的先验偏置",
+    )
+    budget: Optional[str] = Field(
+        default=None, max_length=120, description="可选预算，如 '人均 500 元' / '总预算 5000'"
+    )
+    travel_date: Optional[str] = Field(
+        default=None, max_length=120, description="可选出行日期/时间，如 '2026-06-20' / '6 月下旬周末'"
     )
 
 

@@ -22,6 +22,8 @@ export interface Place {
   phone: string | null;
   photo_reference: string | null;
   google_maps_url: string | null;
+  editorial_summary?: string | null;
+  reviews?: string[];
 }
 
 export interface RouteLeg {
@@ -127,12 +129,21 @@ export type ServerEvent =
 
 export interface ItinerarySlot {
   time: string;
+  duration_min?: number;
   place_id?: string;
   name: string;
+  category?: string;
+  ticket?: string;
+  open_check?: string;
+  transport?: string;
   note?: string;
+  tip?: string;
 }
 
 export interface ItineraryDay {
   day: number;
+  title?: string;
+  weather?: string;
   slots: ItinerarySlot[];
+  cautions?: string[];
 }

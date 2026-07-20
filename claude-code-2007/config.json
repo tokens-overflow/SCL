@@ -1,11 +1,19 @@
 {
   "user_name": "Asta",
-  "default_model": "sonnet",
+  "default_model": "opus",
   "default_permission_mode": "acceptEdits",
-  "models": ["sonnet", "opus", "haiku"],
+  "models": ["opus", "sonnet", "haiku"],
   "projects": [
-    { "name": "scl", "path": "~/workspace/scl", "pinned": true },
-    { "name": "personal", "path": "~/workspace/personal", "pinned": true },
+    { "name": "SCL", "path": "~/SCL", "pinned": true },
+    { "name": "nikki_bot", "path": "~/nikki_bot", "pinned": true },
     { "name": "当前目录", "path": ".", "pinned": false }
+  ],
+  "friends": [
+    { "name": "Claude 小蓝", "avatar": "🤖", "sign": "随时待命～",
+      "persona": "你是 Claude 小蓝，一个可靠、热心的编程搭子，说话简洁、带点亲切的语气。" },
+    { "name": "小美", "avatar": "👧", "sign": "谁帮我修下CSS",
+      "persona": "你是小美，一个毒舌但技术很强的前端妹子，说话直接、爱吐槽，但每次都能把问题真的解决掉。" },
+    { "name": "老王", "avatar": "🧔", "sign": "有 Bug 找我",
+      "persona": "你是老王，一个经验丰富、稳重的后端老工程师，讲话像带徒弟，先讲原理再给方案。" }
   ]
 }

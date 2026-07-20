@@ -109,6 +109,8 @@ def create_app() -> FastAPI:
                 language=payload.language,
                 max_tasks=payload.max_tasks,
                 location_hint=payload.location_hint,
+                budget=payload.budget,
+                travel_date=payload.travel_date,
             )
         except RuntimeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -138,6 +140,8 @@ def create_app() -> FastAPI:
                     language=payload.language,
                     max_tasks=payload.max_tasks,
                     location_hint=payload.location_hint,
+                    budget=payload.budget,
+                    travel_date=payload.travel_date,
                 ):
                     body = event.model_dump_json()
                     yield f"event: {event.type}\ndata: {body}\n\n"

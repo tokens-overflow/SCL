@@ -18,6 +18,8 @@ from ..prompts import itinerary_messages
 class ItineraryInput(BaseModel):
     topic: str
     tasks: list[TaskNode]
+    weather: str = ""        # 天气预报文本块（可空）
+    trip_context: str = ""   # 出行日期/预算等上下文（可空）
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -31,7 +33,12 @@ class ItineraryTask(JsonLLMTask[ItineraryInput, ItineraryResult]):
 
     def build_messages(self, input: ItineraryInput) -> list[dict[str, str]]:
         evidence_text, _places = _evidence_for_itinerary(input.tasks)
-        return itinerary_messages(topic=input.topic, evidence_block=evidence_text)
+        return itinerary_messages(
+            topic=input.topic,
+            evidence_block=evidence_text,
+            weather=input.weather,
+            trip_context=input.trip_context,
+        )
 
     def parse(self, raw: Any, input: ItineraryInput) -> ItineraryResult:
         days = _extract_days(raw)
@@ -55,10 +62,11 @@ def _evidence_for_itinerary(tasks: list[TaskNode]) -> tuple[str, list[Place]]:
 
     lines: list[str] = []
     for idx, place in enumerate(places, start=1):
-        opening = place.opening_hours[0] if place.opening_hours else ""
+        price = f" 价位={'¥' * place.price_level}" if place.price_level else ""
+        hours = (" 营业=" + " | ".join(place.opening_hours)) if place.opening_hours else ""
         lines.append(
             f"{idx}. place_id={place.place_id} name={place.name} "
-            f"rating={place.rating or '-'} address={place.address} {opening}"
+            f"rating={place.rating or '-'}{price} address={place.address}{hours}"
         )
     return "\n".join(lines) or "（无地点）", places
 

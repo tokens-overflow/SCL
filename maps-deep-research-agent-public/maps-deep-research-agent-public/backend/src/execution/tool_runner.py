@@ -28,6 +28,20 @@ from ..tools.maps.results import (
 logger = logging.getLogger(__name__)
 
 
+def _place_ref(place: Place) -> str:
+    """把一个地点转成 Maps directions/matrix 能消费的引用字符串。
+
+    优先用地点名（让矩阵/路线输出里的标签可读，便于 LLM 对应到具体餐厅）；
+    名字缺失时退回精确坐标。
+    """
+    name = (place.name or "").strip()
+    if name and name != "未命名地点":
+        return name
+    if place.lat and place.lng:
+        return f"{place.lat},{place.lng}"
+    return name or "unknown"
+
+
 class ToolRunner:
     """无状态的单任务工具驱动器（除了持有 registry 引用）。"""
 
@@ -115,6 +129,30 @@ class ToolRunner:
                 if "lat" in args:
                     break
 
+        # ── distance_matrix：候选地点是上游 places 任务运行时才发现的，planner
+        #    无法预先写进 tool_args，这里从依赖证据里合成 origins / destinations。
+        #    约定：单点依赖（通常是 geocoding 锚点）= 起点；多点依赖 = 终点候选。
+        if node.tool == "distance_matrix":
+            has_origin = bool(args.get("origins") or args.get("origin"))
+            has_dest = bool(args.get("destinations") or args.get("destination"))
+            if not has_origin or not has_dest:
+                dep_groups: list[list[Place]] = []
+                for dep_id in node.depends_on:
+                    dep = all_nodes.get(dep_id)
+                    if dep and dep.status == "completed" and dep.evidence.places:
+                        dep_groups.append(list(dep.evidence.places))
+                if dep_groups:
+                    flat = [p for group in dep_groups for p in group]
+                    candidates = max(dep_groups, key=len)
+                    anchor_group = next((g for g in dep_groups if len(g) == 1), None)
+                    anchor = anchor_group[0] if anchor_group else flat[0]
+                    if not has_origin:
+                        args["origins"] = [_place_ref(anchor)]
+                    if not has_dest:
+                        # 终点排除起点自身，并限制数量以满足 Maps 元素上限
+                        dests = [_place_ref(p) for p in candidates if p.place_id != anchor.place_id]
+                        args["destinations"] = (dests or [_place_ref(p) for p in candidates])[:10]
+
         # ── directions：从上游 place 名里挑 origin / destination ──
         if node.tool == "directions":
             anchor_places: list[Place] = []
@@ -123,9 +161,9 @@ class ToolRunner:
                 if dep and dep.evidence.places:
                     anchor_places.extend(dep.evidence.places)
             if anchor_places:
-                args.setdefault("origin", anchor_places[0].name)
+                args.setdefault("origin", _place_ref(anchor_places[0]))
                 if len(anchor_places) > 1:
-                    args.setdefault("destination", anchor_places[1].name)
+                    args.setdefault("destination", _place_ref(anchor_places[1]))
 
         return args
 
