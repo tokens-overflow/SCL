@@ -38,7 +38,6 @@ class AppContext:
         self.base_dir = Path(base_dir).resolve()
         self.data_dir = self.base_dir / "data"
         self.frontend_dir = self.base_dir / "frontend"
-        self.legacy_index = self.base_dir / "index.html"
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.config_store = ConfigStore(self.base_dir)
         self.config = self.config_store.snapshot()
@@ -148,15 +147,9 @@ def make_handler(context: AppContext) -> Type[BaseHTTPRequestHandler]:
                 path, query = parsed.path, parse_qs(parsed.query)
                 if path in {"/", "/index.html"}:
                     return self._serve_file(self.app.frontend_dir / "index.html")
-                if path == "/legacy":
-                    if not self.app.legacy_index.is_file():
-                        raise ApiError("legacy UI 不存在", 404)
-                    return self._serve_file(self.app.legacy_index)
                 if path == "/favicon.ico":
                     self.send_response(204); self.send_header("Content-Length", "0"); self.end_headers(); return
-                if path.startswith("/frontend/") or path in {
-                    "/api.js", "/chat.js", "/tasks.js", "/scheduler.js", "/styles/main.css"
-                }:
+                if path.startswith("/frontend/"):
                     return self._serve_file(self._frontend_path(path))
                 if path == "/api/config": return self._json(self.app.config)
                 if path == "/api/slashcommands": return self._json(self.app.task_service.slash_commands())

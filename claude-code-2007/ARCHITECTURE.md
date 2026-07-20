@@ -34,15 +34,15 @@ backend/cli_adapter.py   backend/stores.py
 
 ## 前端职责
 
-| 模块 | 唯一职责 |
-|---|---|
-| `frontend/api.js` | HTTP/SSE 客户端 |
-| `frontend/chat.js` | Claude stream-json 事件到聊天视图的映射 |
-| `frontend/tasks.js` | 页面级状态和任务、好友、Skill 等控制器 |
-| `frontend/scheduler.js` | 定时任务表单与列表 |
-| `frontend/styles/main.css` | 所有视觉样式 |
+前端与后端一样按“结构 / 样式 / 逻辑”分离，全部位于 `frontend/`：
 
-旧单文件界面保留在根目录 `index.html`，访问 `/legacy` 可回退。新功能应优先进入模块化前端；迁移完成前不要删除旧界面。
+| 文件 | 唯一职责 |
+|---|---|
+| `frontend/index.html` | 页面结构（DOM 骨架），只引用外部 CSS/JS |
+| `frontend/styles/main.css` | 所有视觉样式（QQ2007 皮肤） |
+| `frontend/app.js` | 全部前端逻辑：聊天、任务、好友、定时、Skill、QQ空间、小游戏、我的资料等 |
+
+后端 `/` 直接返回 `frontend/index.html`，`/frontend/*` 提供其静态资源。
 
 ## 兼容性边界
 
@@ -55,10 +55,7 @@ backend/cli_adapter.py   backend/stores.py
 ## 回归验证
 
 ```bash
-python3 -m py_compile server.py backend/*.py
-node --check frontend/api.js
-node --check frontend/chat.js
-node --check frontend/tasks.js
-node --check frontend/scheduler.js
+python3 -m py_compile server.py backend/*.py app_native.py
+node --check frontend/app.js
 python3 -W error::ResourceWarning -m unittest discover -s tests -v
 ```

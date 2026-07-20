@@ -1,175 +1,342 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Claude Code 2007</title>
-  <link rel="stylesheet" href="/styles/main.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Code 2007</title>
+<link rel="stylesheet" href="/frontend/styles/main.css">
 </head>
 <body>
-  <div id="app-window">
-    <header id="titlebar">
-      <div class="brand">🐧 Claude Code 2007</div>
-      <div class="title-actions">
-        <button type="button" id="legacy-link" title="打开旧版兼容界面">旧版</button>
+
+<div id="win">
+  <!-- 标题栏 -->
+  <div id="titlebar">
+    <div class="tb-drag" id="tb-drag">
+      <svg class="app-icon" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="#2b6cd0"/><rect x="3.5" y="4.5" width="13" height="11" rx="2" fill="#0d2b52"/><path d="M6 8l2.4 2L6 12" stroke="#7ef0ff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="9.6" y="11.2" width="4.4" height="1.5" rx=".7" fill="#7ef0ff"/></svg>
+      <span class="title" id="win-title">Claude Code 2007</span>
+    </div>
+    <div class="winbtn wb-min" id="win-min" title="最小化"></div>
+    <div class="winbtn wb-max" id="win-max" title="最大化"></div>
+    <div class="winbtn close" id="win-close" title="关闭">✕</div>
+  </div>
+
+  <!-- 工具栏 -->
+  <div id="toolbar">
+    <div class="toolbtn" data-act="sched"><span class="ico">🗓️</span>我的安排</div>
+    <div class="toolbar-sep"></div>
+    <div class="toolbtn" data-act="skills"><span class="ico">🛠️</span>我的skill</div>
+    <div class="toolbtn" data-act="qzone"><span class="ico">🌟</span>QQ空间</div>
+    <div class="toolbtn" data-act="games"><span class="ico">🎮</span>QQ小游戏</div>
+    <div class="toolbtn" data-act="chat"><span class="ico">💬</span>聊天</div>
+  </div>
+
+  <!-- 主体三栏 -->
+  <div id="main">
+    <!-- 左栏 -->
+    <div id="left" class="panel">
+      <div class="group-hd"><span>Claude Code</span><span class="arrow">▲</span></div>
+      <div id="left-scroll">
+        <div class="group-bd" id="nav-list">
+          <div class="nav-item" data-act="addfriend">➕ 添加好友</div>
+          <div class="nav-item" data-act="sched">⏰ 已安排</div>
+          <div class="nav-item" data-act="plugins">🧩 插件</div>
+          <div class="nav-item" data-act="md">📄 CLAUDE.md</div>
+          <div class="nav-item" data-act="qzone">🌟 QQ空间</div>
+          <div class="nav-item" data-act="chat">💬 聊天</div>
+        </div>
+        <div class="group-hd" data-toggle="pinned-list"><span>置顶</span><span class="arrow">▲</span></div>
+        <div class="group-bd" id="pinned-list"></div>
+        <div class="group-hd" data-toggle="task-list"><span>聊天信息</span><span class="arrow">▲</span></div>
+        <div class="group-bd" id="task-list"></div>
       </div>
-    </header>
+      <div id="usercard" title="点击编辑我的资料">
+        <div class="avatar" id="me-avatar">🧑‍💻</div>
+        <div style="flex:1;min-width:0">
+          <div class="uname" id="uname">我</div>
+          <div class="ustatus">在线</div>
+        </div>
+        <span class="me-edit">✎ 编辑</span>
+      </div>
+    </div>
 
-    <nav id="toolbar" aria-label="主导航">
-      <button type="button" data-view="chat" class="active"><span>💬</span>聊天</button>
-      <button type="button" data-view="schedules"><span>⏰</span>我的安排</button>
-      <button type="button" data-view="skills"><span>🧩</span>我的 Skill</button>
-      <button type="button" data-view="claudemd"><span>📘</span>CLAUDE.md</button>
-      <button type="button" data-view="capabilities"><span>🧰</span>能力面板</button>
-      <button type="button" data-view="moments"><span>🌐</span>QQ 空间</button>
-      <button type="button" id="new-task-button" class="primary"><span>➕</span>新建任务</button>
-    </nav>
+    <!-- 中栏 -->
+    <div id="center">
+      <div id="chat-hd">
+        <span id="chat-avatar" class="doc-ico">📄</span>
+        <span id="chat-title">欢迎使用</span>
+        <span id="chat-meta"></span>
+      </div>
+      <div id="messages">
+        <div id="empty-state">
+          <div class="big">🐧</div>
+          <p>还没有任务。点击左上角「新建任务」，</p>
+          <p>让 Claude Code 帮你写代码、改 Bug、查文档，超可靠哒！</p>
+        </div>
+      </div>
+      <div id="input-area">
+        <div id="input-tools">
+          <div class="in-btn" id="emoji-btn">😊 表情</div>
+          <div class="in-btn" id="slash-btn">⚡ 命令</div>
+          <div class="in-btn" id="attach-btn">📎 附加 ▾</div>
+          <div class="in-btn" id="stop-btn">⏹ 停止</div>
+        </div>
+        <textarea id="prompt" placeholder="要求后续变更…（Ctrl+Enter 发送）"></textarea>
+        <div id="send-row">
+          <span style="color:#93a5ba">连按两次 Ctrl+Enter 也不会重复发送，放心敲</span>
+          <div id="model-badge">⚙ <span class="chip" id="model-chip">sonnet</span></div>
+          <button id="send-btn">发送(S) ▾</button>
+        </div>
+      </div>
 
-    <div id="layout">
-      <aside id="left-panel">
-        <section class="panel-section">
-          <header><strong>聊天记录</strong></header>
-          <input id="task-search" type="search" placeholder="搜索聊天">
-        </section>
-        <section class="panel-section task-section">
-          <header><span>置顶</span></header>
-          <div id="pinned-task-list" class="task-list"></div>
-          <header><span>最近</span></header>
-          <div id="task-list" class="task-list grow"></div>
-        </section>
-        <section class="profile-card">
-          <div id="profile-avatar-label" class="profile-avatar"></div>
-          <div><strong id="profile-name-label">我</strong><small>● 在线</small></div>
-        </section>
-      </aside>
+      <!-- 定时任务视图 -->
+      <div id="sched-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">⏰ 已安排 · 定时任务</span>
+          <span class="spacer"></span>
+          <button class="mini-btn" id="sched-new-btn">＋ 新建定时任务</button>
+        </div>
+        <div class="cview-body"><div id="sched-list"></div></div>
+      </div>
 
-      <main id="workspace">
-        <section id="view-chat" class="view active">
-          <header class="view-header">
-            <div>
-              <h1 id="chat-title">欢迎使用</h1>
-              <small id="chat-meta"></small>
-            </div>
-          </header>
-          <div id="messages"></div>
-          <footer id="composer">
-            <textarea id="prompt" rows="3" placeholder="输入消息，Ctrl/⌘ + Enter 发送"></textarea>
-            <div class="composer-actions">
-              <button type="button" id="stop-button" hidden>⏹ 停止</button>
-              <button type="button" id="send-button" class="primary">发送</button>
-            </div>
-          </footer>
-        </section>
+      <!-- 插件 / 能力面板视图 -->
+      <div id="plugins-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">🧩 插件 · 能力面板</span>
+          <span class="spacer"></span>
+          <span id="plugins-meta" style="font-size:11px;color:#5a7699"></span>
+        </div>
+        <div class="cview-body"><div id="plugins-body"></div></div>
+      </div>
 
-        <section id="view-schedules" class="view">
-          <header class="view-header"><h1>我的安排</h1><small>应用运行期间按计划启动 Claude 任务</small></header>
-          <div class="form-grid schedule-form">
-            <label>标题<input id="schedule-title" type="text" placeholder="例如：每日代码检查"></label>
-            <label>项目<select id="schedule-project"></select></label>
-            <label>模型<select id="schedule-model"></select></label>
-            <label>权限<select id="schedule-permission">
-              <option value="default">default</option>
-              <option value="plan">plan</option>
-              <option value="acceptEdits" selected>acceptEdits</option>
-              <option value="bypassPermissions">bypassPermissions</option>
-            </select></label>
-            <label>类型<select id="schedule-type">
-              <option value="interval">每隔一段时间</option>
-              <option value="daily">每天</option>
-              <option value="once">一次性</option>
-            </select></label>
-            <label id="schedule-interval-wrap">间隔（分钟）<input id="schedule-interval" type="number" min="1" value="60"></label>
-            <label id="schedule-time-wrap" hidden>每天时间<input id="schedule-time" type="time" value="09:00"></label>
-            <label id="schedule-once-wrap" hidden>执行时间<input id="schedule-once" type="datetime-local"></label>
-            <label class="wide">Prompt<textarea id="schedule-prompt" rows="4" placeholder="到点后交给 Claude 的指令"></textarea></label>
-            <div class="wide form-actions"><button type="button" id="schedule-create" class="primary">创建定时任务</button></div>
+      <!-- 我的 skill 管理视图 -->
+      <div id="skills-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">🛠️ 我的 skill</span>
+          <span class="spacer"></span>
+          <button class="mini-btn" id="skill-new-btn">＋ 新建 skill</button>
+        </div>
+        <div class="cview-body"><div id="skills-list"></div></div>
+      </div>
+
+      <!-- QQ小游戏 视图 -->
+      <div id="games-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">🎮 QQ小游戏</span>
+          <span class="spacer"></span>
+          <span id="game-score" style="font-size:12px;color:#5a7699"></span>
+          <button class="mini-btn" id="game-back" style="display:none">↩ 游戏大厅</button>
+        </div>
+        <div class="cview-body">
+          <div id="game-menu">
+            <div class="game-card" data-game="snake"><div class="gc-ico">🐍</div><div class="gc-name">贪吃蛇</div><div class="gc-desc">方向键 / WASD 控制，吃豆变长，别撞墙撞自己</div></div>
+            <div class="game-card" data-game="g2048"><div class="gc-ico">🔢</div><div class="gc-name">2048</div><div class="gc-desc">方向键合并相同数字，凑出 2048</div></div>
+            <div class="game-card" data-game="memory"><div class="gc-ico">🃏</div><div class="gc-name">翻牌记忆</div><div class="gc-desc">翻开两张相同的 emoji 配对，全配对即通关</div></div>
           </div>
-          <div id="schedule-list" class="card-list"></div>
-        </section>
+          <div id="game-stage" style="display:none"></div>
+        </div>
+      </div>
 
-        <section id="view-skills" class="view split-view">
-          <aside>
-            <header class="view-header compact"><h1>我的 Skill</h1><button type="button" id="skill-new">新建</button></header>
-            <div id="skill-list" class="skill-list"></div>
-          </aside>
-          <div class="editor-pane">
-            <input id="skill-dir" type="hidden">
-            <label>名称<input id="skill-name" type="text" placeholder="skill-name"></label>
-            <label>说明<input id="skill-description" type="text" placeholder="这个 Skill 在什么场景使用"></label>
-            <label class="grow">内容<textarea id="skill-body" rows="20" placeholder="SKILL.md 正文"></textarea></label>
-            <div class="form-actions">
-              <button type="button" id="skill-delete" class="danger-button" hidden>删除</button>
-              <button type="button" id="skill-save" class="primary">保存</button>
-            </div>
+      <!-- QQ空间 视图 -->
+      <div id="qzone-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">🌟 QQ空间</span>
+          <span class="spacer"></span>
+          <span id="qz-me" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#14467e"></span>
+        </div>
+        <div class="cview-body">
+          <div id="qz-post">
+            <textarea id="qz-text" placeholder="这一刻的想法…（发条动态）"></textarea>
+            <div style="text-align:right;margin-top:6px"><button class="mini-btn" id="qz-send">发表</button></div>
           </div>
-        </section>
+          <div id="qz-feed"></div>
+        </div>
+      </div>
 
-        <section id="view-claudemd" class="view">
-          <header class="view-header"><h1>CLAUDE.md 编辑器</h1><small id="claudemd-path"></small></header>
-          <div class="editor-pane full">
-            <label>项目<select id="claudemd-project"></select></label>
-            <label class="grow">内容<textarea id="claudemd-content" rows="24"></textarea></label>
-            <div class="form-actions"><button type="button" id="claudemd-save" class="primary">保存 CLAUDE.md</button></div>
-          </div>
-        </section>
+      <!-- CLAUDE.md 编辑视图 -->
+      <div id="md-view" class="cview">
+        <div class="cview-hd">
+          <span class="cv-title">📄 CLAUDE.md</span>
+          <select id="md-project" style="max-width:160px"></select>
+          <span class="spacer"></span>
+          <button class="mini-btn" id="md-reload-btn">↺ 重新加载</button>
+          <button class="mini-btn" id="md-save-btn">💾 保存</button>
+        </div>
+        <div class="cview-body" style="display:flex;flex-direction:column">
+          <p class="md-path" id="md-path"></p>
+          <textarea id="md-editor" placeholder="# 项目说明 / 给 Claude 的指令…"></textarea>
+        </div>
+      </div>
+    </div>
 
-        <section id="view-capabilities" class="view">
-          <header class="view-header"><h1>插件 · 能力面板</h1><small>数据来自最近一次 Claude Code init 事件</small></header>
-          <pre id="capabilities-json" class="json-panel">尚未收到能力快照。</pre>
-        </section>
-
-        <section id="view-moments" class="view">
-          <header class="view-header"><h1>QQ 空间</h1><small>本地动态，不会上传到第三方服务</small></header>
-          <div class="moment-compose"><textarea id="moment-text" rows="3" placeholder="说点什么吧……"></textarea><button type="button" id="moment-create" class="primary">发表</button></div>
-          <div id="moment-list" class="card-list"></div>
-        </section>
-      </main>
-
-      <aside id="right-panel">
-        <section class="friends-panel">
-          <header><strong>我的好友 (<span id="friend-count">0</span>)</strong></header>
-          <div id="friend-list" class="friend-list"></div>
-        </section>
-        <details class="side-form">
-          <summary>➕ 添加好友</summary>
-          <label>名字<input id="friend-name" type="text"></label>
-          <label>头像<input id="friend-avatar" type="text" placeholder="emoji，例如 🤖"></label>
-          <label>签名<input id="friend-sign" type="text"></label>
-          <label>人设<textarea id="friend-persona" rows="4"></textarea></label>
-          <label>项目<select id="friend-project"></select></label>
-          <label>模型<select id="friend-model"></select></label>
-          <button type="button" id="friend-create" class="primary">添加</button>
-        </details>
-        <details class="side-form">
-          <summary>✏️ 编辑我的资料</summary>
-          <label>名字<input id="profile-name" type="text"></label>
-          <label>头像<input id="profile-avatar" type="text"></label>
-          <button type="button" id="profile-save" class="primary">保存</button>
-        </details>
-      </aside>
+    <!-- 右栏 -->
+    <div id="right" class="panel">
+      <div class="group-hd"><span>Claude 好友</span><span class="arrow">⤢</span></div>
+      <div id="mascot-box">
+        <!-- 像素风小蓝吉祥物 -->
+        <svg width="128" height="140" viewBox="0 0 64 70" shape-rendering="crispEdges">
+          <rect x="14" y="4" width="36" height="30" rx="7" fill="#3b7de0"/>
+          <rect x="12" y="8" width="4" height="12" rx="2" fill="#3b7de0"/>
+          <rect x="48" y="8" width="4" height="12" rx="2" fill="#3b7de0"/>
+          <rect x="19" y="10" width="26" height="17" rx="3" fill="#0d2b52"/>
+          <path d="M24 14l4 3.5-4 3.5" stroke="#7ef0ff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="31" y="19" width="8" height="2.4" rx="1.2" fill="#7ef0ff"/>
+          <rect x="20" y="34" width="24" height="22" rx="8" fill="#4b8ae8"/>
+          <rect x="26" y="38" width="12" height="9" rx="3" fill="#bfe0ff"/>
+          <rect x="12" y="38" width="8" height="14" rx="4" fill="#3b7de0"/>
+          <rect x="44" y="38" width="8" height="14" rx="4" fill="#3b7de0"/>
+          <rect x="22" y="56" width="8" height="9" rx="3.5" fill="#2c66c4"/>
+          <rect x="34" y="56" width="8" height="9" rx="3.5" fill="#2c66c4"/>
+        </svg>
+      </div>
+      <div id="profile-card">
+        <div><span class="pname">Claude 小蓝</span><span class="lv">LV·07</span></div>
+        <div style="margin-top:4px">代码有问题？找我！<br>我是你的智能伙伴 Claude<br>陪你写代码，改 Bug，<br>查文档，超可靠哒！</div>
+      </div>
+      <div class="group-hd"><span id="friends-hd">我的好友</span><span class="arrow">▲</span></div>
+      <div id="friends"></div>
     </div>
   </div>
 
-  <div id="task-modal" class="modal-mask" role="dialog" aria-modal="true">
-    <div class="modal">
-      <header><h2>新建任务</h2></header>
-      <label>标题<input id="task-title" type="text" placeholder="可选"></label>
-      <label>项目<select id="task-project"></select></label>
-      <label>模型<select id="task-model"></select></label>
-      <label>权限<select id="task-permission">
-        <option value="default">default</option>
-        <option value="plan">plan</option>
-        <option value="acceptEdits" selected>acceptEdits</option>
-        <option value="bypassPermissions">bypassPermissions</option>
+  <!-- 状态栏 -->
+  <div id="statusbar">
+    <div id="searchbox">🔍 <input placeholder="搜索任务…" id="search-input"></div>
+    <div class="sb-right">
+      <span id="conn-dot">🛡️ 安全</span>
+      <span>📶</span>
+      <span id="clock"></span>
+    </div>
+  </div>
+</div>
+
+<!-- 表情面板 -->
+<div id="emoji-panel"></div>
+
+<!-- 斜杠命令下拉 -->
+<div id="slash-pop"></div>
+
+<!-- 附加:允许 Claude 访问的目录 -->
+<div id="attach-pop"></div>
+
+<!-- 新建任务弹窗 -->
+<div id="modal-mask">
+  <div id="modal">
+    <div class="m-title">📋 新建任务<div class="winbtn close" id="modal-close">✕</div></div>
+    <div class="m-body-form">
+      <label><span class="lab">标题：</span><input type="text" id="f-title" placeholder="留空自动取指令前几个字"></label>
+      <label><span class="lab">项目：</span><select id="f-project"></select></label>
+      <label><span class="lab">模型：</span><select id="f-model"></select></label>
+      <label><span class="lab">权限：</span><select id="f-perm">
+        <option value="acceptEdits">acceptEdits（自动接受编辑）</option>
+        <option value="plan">plan（只做规划）</option>
+        <option value="default">default（默认）</option>
+        <option value="bypassPermissions">bypassPermissions（全自动，慎用）</option>
       </select></label>
-      <label>Prompt<textarea id="task-prompt" rows="8"></textarea></label>
-      <footer><button type="button" id="task-modal-cancel">取消</button><button type="button" id="task-modal-create" class="primary">创建</button></footer>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">指令：</span><textarea id="f-prompt" placeholder="例如：优化 KV 读写成本 / 在当前目录创建 hello.txt"></textarea></label>
+    </div>
+    <div class="m-foot">
+      <button class="xp-btn" id="f-ok">确定</button>
+      <button class="xp-btn" id="f-cancel">取消</button>
     </div>
   </div>
+</div>
 
-  <div id="error-toast" class="toast error"></div>
-  <div id="success-toast" class="toast success"></div>
+<!-- 新建定时任务弹窗 -->
+<div id="sched-mask" class="modal-mask">
+  <div class="modal">
+    <div class="m-title">⏰ 新建定时任务<div class="winbtn close" id="sm-close">✕</div></div>
+    <div class="m-body-form">
+      <label><span class="lab">标题：</span><input type="text" id="s-title" placeholder="留空自动取指令前几个字"></label>
+      <label><span class="lab">项目：</span><select id="s-project"></select></label>
+      <label><span class="lab">模型：</span><select id="s-model"></select></label>
+      <label><span class="lab">权限：</span><select id="s-perm">
+        <option value="acceptEdits">acceptEdits（自动接受编辑）</option>
+        <option value="plan">plan（只做规划）</option>
+        <option value="default">default（默认）</option>
+        <option value="bypassPermissions">bypassPermissions（全自动，慎用）</option>
+      </select></label>
+      <label><span class="lab">触发：</span><select id="s-type">
+        <option value="daily">每天定时</option>
+        <option value="interval">每隔一段</option>
+        <option value="once">一次性</option>
+      </select></label>
+      <label id="s-row-time"><span class="lab">时间：</span><input type="time" id="s-time" value="09:00"></label>
+      <label id="s-row-interval" style="display:none"><span class="lab">间隔：</span><span>每 <input type="number" id="s-interval" value="60" min="1" style="width:70px"> 分钟</span></label>
+      <label id="s-row-once" style="display:none"><span class="lab">运行于：</span><input type="datetime-local" id="s-datetime"></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">指令：</span><textarea id="s-prompt" placeholder="例如：/security-review / 把今天的改动跑一遍测试"></textarea></label>
+    </div>
+    <div class="m-foot">
+      <button class="xp-btn" id="s-ok">确定</button>
+      <button class="xp-btn" id="s-cancel">取消</button>
+    </div>
+  </div>
+</div>
 
-  <script type="module" src="/tasks.js"></script>
+<!-- 添加好友弹窗 -->
+<div id="friend-mask" class="modal-mask">
+  <div class="modal">
+    <div class="m-title">➕ 添加好友<div class="winbtn close" id="fr-close">✕</div></div>
+    <div class="m-body-form">
+      <label><span class="lab">名字：</span><input type="text" id="fr-name" placeholder="例如：小美 / 老王 / 产品经理 Lisa"></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">头像：</span>
+        <div style="flex:1">
+          <div id="fr-avatar-grid" class="avatar-grid"></div>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
+            <span style="color:#789;font-size:11px">或用 emoji</span>
+            <input type="text" id="fr-avatar" class="av-emoji" maxlength="4" style="max-width:70px" placeholder="🙂">
+          </div>
+        </div>
+      </label>
+      <label><span class="lab">签名：</span><input type="text" id="fr-sign" placeholder="状态签名，如 有 Bug 找我"></label>
+      <label><span class="lab">项目：</span><select id="fr-project"></select></label>
+      <label><span class="lab">模型：</span><select id="fr-model"></select></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">性格：</span><textarea id="fr-persona" placeholder="设定这个好友的人设/说话风格。例如：你是资深后端老王，讲话像带徒弟，先讲原理再给方案。"></textarea></label>
+    </div>
+    <div class="m-foot">
+      <button class="xp-btn" id="fr-ok">添加</button>
+      <button class="xp-btn" id="fr-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新建/编辑 skill 弹窗 -->
+<div id="skill-mask" class="modal-mask">
+  <div class="modal" style="width:560px">
+    <div class="m-title"><span id="skill-mtitle">🛠️ 新建 skill</span><div class="winbtn close" id="sk-close">✕</div></div>
+    <div class="m-body-form">
+      <label><span class="lab">名称：</span><input type="text" id="sk-name" placeholder="小写字母/数字/连字符，如 my-helper"></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">说明：</span><textarea id="sk-desc" style="height:56px" placeholder="一句话描述这个 skill 干嘛的（Claude 靠它判断何时调用）"></textarea></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">内容：</span><textarea id="sk-body" style="height:200px;font-family:'SFMono-Regular',Consolas,monospace" placeholder="skill 的正文（Markdown）：给 Claude 的具体指令/步骤。"></textarea></label>
+    </div>
+    <div class="m-foot">
+      <button class="xp-btn" id="sk-ok">保存</button>
+      <button class="xp-btn" id="sk-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑我的资料弹窗 -->
+<div id="profile-mask" class="modal-mask">
+  <div class="modal">
+    <div class="m-title">👤 我的资料<div class="winbtn close" id="pf-close">✕</div></div>
+    <div class="m-body-form">
+      <label><span class="lab">昵称：</span><input type="text" id="pf-name" placeholder="你的昵称"></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">头像：</span>
+        <div style="flex:1">
+          <div id="pf-avatar-grid" class="avatar-grid"></div>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
+            <span style="color:#789;font-size:11px">或用 emoji</span>
+            <input type="text" id="pf-avatar" class="av-emoji" maxlength="4" style="max-width:70px" placeholder="🙂">
+          </div>
+        </div>
+      </label>
+    </div>
+    <div class="m-foot">
+      <button class="xp-btn" id="pf-ok">保存</button>
+      <button class="xp-btn" id="pf-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<script src="/frontend/app.js"></script>
 </body>
 </html>

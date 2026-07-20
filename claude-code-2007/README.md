@@ -13,36 +13,51 @@ QQ 2007 经典皮肤的 **Claude Code 图形壳**——给你本机的 `claude` 
 
 **一句话：这是个"壳"，真正干活的是你电脑本机的 `claude` 命令。**
 
+采用 backend / frontend 分层，依赖只向下，各模块单一职责（详见 `ARCHITECTURE.md`）：
+
 ```
-┌─────────────────────────────────────────────┐
-│  前端  index.html （单文件，QQ2007 皮肤）         │
-│  纯 HTML/CSS/JS，无框架、无外部依赖               │
-└───────────────┬─────────────────────────────┘
-                │  HTTP + SSE（浏览器 ⇄ 本地服务）
-┌───────────────┴─────────────────────────────┐
-│  后端  server.py （Python 标准库，零 pip 依赖）    │
-│  · 每个会话 spawn 一个 claude 子进程              │
-│  · stdout 的 JSON 事件流经 SSE 转发给前端         │
-│  · stdin 写 JSON 行实现多轮对话                   │
-└───────────────┬─────────────────────────────┘
-                │  子进程（headless stream-json 模式）
-┌───────────────┴─────────────────────────────┐
-│  claude -p --input-format stream-json         │
-│         --output-format stream-json --verbose │
-│         [--model … --add-dir … --resume …]    │
-│  = 你本机已登录的 Claude Code 本体               │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│  frontend/  （QQ2007 皮肤，结构/样式/逻辑分离，无框架无依赖）      │
+│   index.html   DOM 骨架，只引用外部 CSS/JS                     │
+│   styles/main.css   全部样式                                  │
+│   app.js       全部逻辑：聊天/任务/好友/定时/skill/QQ空间/小游戏    │
+└──────────────────────────┬───────────────────────────────┘
+                           │  HTTP + SSE（浏览器 ⇄ 本地服务）
+┌──────────────────────────┴───────────────────────────────┐
+│  backend/  （Python 标准库，零 pip 依赖）                       │
+│   api.py          HTTP API / SSE / 静态资源 / 依赖装配          │
+│   task_service.py 一个 claude 会话的生命周期、事件编号、订阅       │
+│   scheduler.py    定时任务（interval / daily / once）          │
+│   cli_adapter.py  构造 claude CLI 参数，管理 stdin/stdout/stderr │
+│   stores.py       原子 JSON 持久化（好友/动态/资料/任务/能力快照）  │
+│  server.py = 兼容入口；app_native.py = 无边框原生窗口启动器        │
+└──────────────────────────┬───────────────────────────────┘
+                           │  子进程（headless stream-json 模式）
+┌──────────────────────────┴───────────────────────────────┐
+│  claude -p --input-format stream-json                      │
+│         --output-format stream-json --verbose              │
+│         [--model … --add-dir … --resume …]                 │
+│  = 你本机已登录的 Claude Code 本体                            │
+└──────────────────────────────────────────────────────────┘
 ```
 
-**组成文件**
+**目录结构**
 
-| 文件 | 作用 |
+| 路径 | 作用 |
 |------|------|
-| `server.py` | HTTP 服务 + 会话管理 + 定时任务 + 技能/好友/动态/资料等所有 API。**只用 Python 标准库** |
-| `app_native.py` | 无边框原生窗口启动器（用 pywebview）。没装 pywebview 会**自动退回浏览器**打开 |
-| `index.html` | 全部前端（结构 + 样式 + 逻辑，单文件） |
+| `frontend/index.html` | 页面结构（只引用外部 CSS/JS） |
+| `frontend/styles/main.css` | 全部样式 |
+| `frontend/app.js` | 全部前端逻辑 |
+| `backend/api.py` | HTTP/SSE + 静态资源 + 依赖装配 |
+| `backend/task_service.py` | 会话生命周期、事件编号、订阅、主动停止 |
+| `backend/scheduler.py` | 定时任务计算/持久化/触发 |
+| `backend/cli_adapter.py` | claude CLI 参数与 stdin/stdout/stderr |
+| `backend/stores.py` | 原子 JSON 写入及各类本地数据仓库 |
+| `server.py` | 兼容入口（`app_native.py` 从这里取 `Handler` 等符号） |
+| `app_native.py` | 无边框原生窗口启动器（pywebview），没装则**自动退回浏览器** |
 | `config.json` | 用户配置：昵称、默认模型、权限、项目目录、默认好友 |
 | `data/` | 运行时数据（不入库）：会话事件、任务、定时、好友、动态、资料、能力快照 |
+| `tests/` | 冒烟测试 + stub claude 替身 |
 | `启动.command` / `启动.bat` | Mac / Windows 双击即启动 |
 
 **关键设计**
@@ -164,8 +179,11 @@ python3 server.py 8899      # 换端口（默认 8787）
 
 ## 测试（不消耗额度）
 
-用 stub 假 CLI 验证整条链路：
+回归检查（语法 + 冒烟测试，全程用 stub 假 CLI，不调用真 claude）：
 ```bash
-CLAUDE2007_CLAUDE_BIN=/path/to/stub-claude python3 server.py
+python3 -m py_compile server.py backend/*.py app_native.py
+node --check frontend/app.js
+python3 -m unittest discover -s tests
 ```
-stub 只需读 stdin 的 JSON 行、往 stdout 写 `init` / `assistant` / `result` 事件即可。
+`tests/stub_claude.py` 是假的 claude：读 stdin 的 JSON 行、往 stdout 写 `init` / `assistant` / `result` 事件。
+手动联调也可用它：`CLAUDE2007_CLAUDE_BIN=tests/stub_claude.py python3 server.py`。
