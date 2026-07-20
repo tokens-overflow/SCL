@@ -71,6 +71,7 @@ class TaskService:
         }
         self._slash_names = list(SLASH_DESCRIPTIONS)
 
+    # ---------- queries ----------
     def list_tasks(self) -> list[dict[str, Any]]:
         return self.tasks.list()
 
@@ -82,8 +83,12 @@ class TaskService:
 
     def slash_commands(self) -> list[dict[str, str]]:
         with self.lock:
-            return [{"name": name, "desc": SLASH_DESCRIPTIONS.get(name, "")} for name in self._slash_names]
+            return [
+                {"name": name, "desc": SLASH_DESCRIPTIONS.get(name, "")}
+                for name in self._slash_names
+            ]
 
+    # ---------- event stream ----------
     def subscribe(self, task_id: str) -> queue.Queue[dict[str, Any]]:
         self.get_task(task_id)
         channel: queue.Queue[dict[str, Any]] = queue.Queue()
@@ -127,12 +132,15 @@ class TaskService:
     def _apply_event(self, task_id: str, event: dict[str, Any]) -> None:
         event_type = event.get("type")
         if event_type == "system" and event.get("subtype") == "init":
-            slash_commands = [name for name in event.get("slash_commands", []) if name and not str(name).startswith("__")]
+            slash_commands = [
+                name for name in event.get("slash_commands", [])
+                if name and not str(name).startswith("__")
+            ]
             with self.lock:
                 for name in slash_commands:
                     if name not in self._slash_names:
                         self._slash_names.append(name)
-            self.capabilities.replace({
+            capability_snapshot = {
                 "model": event.get("model"),
                 "version": event.get("claude_code_version"),
                 "mcp_servers": event.get("mcp_servers", []),
@@ -141,7 +149,8 @@ class TaskService:
                 "plugins": event.get("plugins", []),
                 "slash_count": len(slash_commands),
                 "updated_at": time.time(),
-            })
+            }
+            self.capabilities.replace(capability_snapshot)
 
             def update(task: dict[str, Any]) -> None:
                 task["session_id"] = event.get("session_id") or task.get("session_id")
@@ -157,9 +166,20 @@ class TaskService:
                 self._persist_seq(task)
             self.tasks.mutate(task_id, update)
 
-    def create_task(self, *, title: str, project: str, cwd: Path | str, model: str | None,
-                    permission_mode: str | None, prompt: str, add_dirs: list[str] | None = None,
-                    agent_name: str | None = None, agent_avatar: str | None = None) -> dict[str, Any]:
+    # ---------- lifecycle ----------
+    def create_task(
+        self,
+        *,
+        title: str,
+        project: str,
+        cwd: Path | str,
+        model: str | None,
+        permission_mode: str | None,
+        prompt: str,
+        add_dirs: list[str] | None = None,
+        agent_name: str | None = None,
+        agent_avatar: str | None = None,
+    ) -> dict[str, Any]:
         normalized_cwd = Path(cwd).resolve()
         if not normalized_cwd.is_dir():
             raise ValueError(f"项目目录不存在: {normalized_cwd}")
@@ -206,7 +226,10 @@ class TaskService:
             if handle is None or not handle.is_alive():
                 handle = self._spawn(task, resume=True)
             self._cancelled.discard(task_id)
-        self.tasks.mutate(task_id, lambda item: item.update(status="running", updated_at=time.time()))
+        self.tasks.mutate(
+            task_id,
+            lambda item: item.update(status="running", updated_at=time.time()),
+        )
         self.emit(task_id, {"type": "x-user", "text": text, "ts": time.time()})
         try:
             handle.send_user_message(text)
@@ -220,7 +243,10 @@ class TaskService:
         with self.lock:
             handle = self._handles.get(task_id)
             self._cancelled.add(task_id)
-        self.tasks.mutate(task_id, lambda item: item.update(status="stopping", updated_at=time.time()))
+        self.tasks.mutate(
+            task_id,
+            lambda item: item.update(status="stopping", updated_at=time.time()),
+        )
         if handle is not None and handle.is_alive():
             handle.terminate()
         else:
@@ -247,6 +273,7 @@ class TaskService:
         directory = Path(os.path.expanduser(path)).resolve()
         if not directory.is_dir():
             raise ValueError(f"目录不存在: {directory}")
+
         def update(task: dict[str, Any]) -> None:
             dirs = task.setdefault("add_dirs", [])
             if str(directory) != task.get("cwd") and str(directory) not in dirs:
@@ -274,6 +301,7 @@ class TaskService:
         self.emit(task_id, {"type": "x-sys", "text": note})
 
     def shutdown(self) -> None:
+        """Terminate all live CLI children during application shutdown."""
         with self.lock:
             handles = list(self._handles.items())
             self._cancelled.update(task_id for task_id, _ in handles)
@@ -294,13 +322,21 @@ class TaskService:
 
     def _spawn(self, task: dict[str, Any], *, resume: bool) -> SessionHandle:
         task_id = task["id"]
-        spec = CliLaunchSpec(task_id=task_id, cwd=Path(task["cwd"]), model=task.get("model"),
-            permission_mode=task.get("permission_mode"), add_dirs=tuple(task.get("add_dirs", [])),
-            session_id=task.get("session_id"), resume=resume)
-        handle = self.cli.start(spec,
+        spec = CliLaunchSpec(
+            task_id=task_id,
+            cwd=Path(task["cwd"]),
+            model=task.get("model"),
+            permission_mode=task.get("permission_mode"),
+            add_dirs=tuple(task.get("add_dirs", [])),
+            session_id=task.get("session_id"),
+            resume=resume,
+        )
+        handle = self.cli.start(
+            spec,
             on_event=lambda event: self._on_cli_event(task_id, event),
             on_error=lambda text: self._on_cli_error(task_id, text),
-            on_exit=lambda code: self._on_cli_exit(task_id, code))
+            on_exit=lambda code: self._on_cli_exit(task_id, code),
+        )
         with self.lock:
             self._handles[task_id] = handle
         return handle
@@ -329,6 +365,7 @@ class TaskService:
             self.tasks.mutate(task_id, mark_cancelled)
             self.emit(task_id, {"type": "x-proc-exit", "code": code, "cancelled": True})
             return
+
         def mark_exited(task: dict[str, Any]) -> None:
             if current.get("status") == "running":
                 task["status"] = "error" if code else "idle"
