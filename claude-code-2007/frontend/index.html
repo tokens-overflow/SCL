@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claude Code 2007</title>
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body>
+  <div id="app-window">
+    <header id="titlebar">
+      <div class="brand">🐧 Claude Code 2007</div>
+      <div class="title-actions">
+        <button type="button" id="legacy-link" title="打开旧版兼容界面">旧版</button>
+      </div>
+    </header>
+
+    <nav id="toolbar" aria-label="主导航">
+      <button type="button" data-view="chat" class="active"><span>💬</span>聊天</button>
+      <button type="button" data-view="schedules"><span>⏰</span>我的安排</button>
+      <button type="button" data-view="skills"><span>🧩</span>我的 Skill</button>
+      <button type="button" data-view="claudemd"><span>📘</span>CLAUDE.md</button>
+      <button type="button" data-view="capabilities"><span>🧰</span>能力面板</button>
+      <button type="button" data-view="moments"><span>🌐</span>QQ 空间</button>
+      <button type="button" id="new-task-button" class="primary"><span>➕</span>新建任务</button>
+    </nav>
+
+    <div id="layout">
+      <aside id="left-panel">
+        <section class="panel-section">
+          <header><strong>聊天记录</strong></header>
+          <input id="task-search" type="search" placeholder="搜索聊天">
+        </section>
+        <section class="panel-section task-section">
+          <header><span>置顶</span></header>
+          <div id="pinned-task-list" class="task-list"></div>
+          <header><span>最近</span></header>
+          <div id="task-list" class="task-list grow"></div>
+        </section>
+        <section class="profile-card">
+          <div id="profile-avatar-label" class="profile-avatar"></div>
+          <div><strong id="profile-name-label">我</strong><small>● 在线</small></div>
+        </section>
+      </aside>
+
+      <main id="workspace">
+        <section id="view-chat" class="view active">
+          <header class="view-header">
+            <div>
+              <h1 id="chat-title">欢迎使用</h1>
+              <small id="chat-meta"></small>
+            </div>
+          </header>
+          <div id="messages"></div>
+          <footer id="composer">
+            <textarea id="prompt" rows="3" placeholder="输入消息，Ctrl/⌘ + Enter 发送"></textarea>
+            <div class="composer-actions">
+              <button type="button" id="stop-button" hidden>⏹ 停止</button>
+              <button type="button" id="send-button" class="primary">发送</button>
+            </div>
+          </footer>
+        </section>
+
+        <section id="view-schedules" class="view">
+          <header class="view-header"><h1>我的安排</h1><small>应用运行期间按计划启动 Claude 任务</small></header>
+          <div class="form-grid schedule-form">
+            <label>标题<input id="schedule-title" type="text" placeholder="例如：每日代码检查"></label>
+            <label>项目<select id="schedule-project"></select></label>
+            <label>模型<select id="schedule-model"></select></label>
+            <label>权限<select id="schedule-permission">
+              <option value="default">default</option>
+              <option value="plan">plan</option>
+              <option value="acceptEdits" selected>acceptEdits</option>
+              <option value="bypassPermissions">bypassPermissions</option>
+            </select></label>
+            <label>类型<select id="schedule-type">
+              <option value="interval">每隔一段时间</option>
+              <option value="daily">每天</option>
+              <option value="once">一次性</option>
+            </select></label>
+            <label id="schedule-interval-wrap">间隔（分钟）<input id="schedule-interval" type="number" min="1" value="60"></label>
+            <label id="schedule-time-wrap" hidden>每天时间<input id="schedule-time" type="time" value="09:00"></label>
+            <label id="schedule-once-wrap" hidden>执行时间<input id="schedule-once" type="datetime-local"></label>
+            <label class="wide">Prompt<textarea id="schedule-prompt" rows="4" placeholder="到点后交给 Claude 的指令"></textarea></label>
+            <div class="wide form-actions"><button type="button" id="schedule-create" class="primary">创建定时任务</button></div>
+          </div>
+          <div id="schedule-list" class="card-list"></div>
+        </section>
+
+        <section id="view-skills" class="view split-view">
+          <aside>
+            <header class="view-header compact"><h1>我的 Skill</h1><button type="button" id="skill-new">新建</button></header>
+            <div id="skill-list" class="skill-list"></div>
+          </aside>
+          <div class="editor-pane">
+            <input id="skill-dir" type="hidden">
+            <label>名称<input id="skill-name" type="text" placeholder="skill-name"></label>
+            <label>说明<input id="skill-description" type="text" placeholder="这个 Skill 在什么场景使用"></label>
+            <label class="grow">内容<textarea id="skill-body" rows="20" placeholder="SKILL.md 正文"></textarea></label>
+            <div class="form-actions">
+              <button type="button" id="skill-delete" class="danger-button" hidden>删除</button>
+              <button type="button" id="skill-save" class="primary">保存</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-claudemd" class="view">
+          <header class="view-header"><h1>CLAUDE.md 编辑器</h1><small id="claudemd-path"></small></header>
+          <div class="editor-pane full">
+            <label>项目<select id="claudemd-project"></select></label>
+            <label class="grow">内容<textarea id="claudemd-content" rows="24"></textarea></label>
+            <div class="form-actions"><button type="button" id="claudemd-save" class="primary">保存 CLAUDE.md</button></div>
+          </div>
+        </section>
+
+        <section id="view-capabilities" class="view">
+          <header class="view-header"><h1>插件 · 能力面板</h1><small>数据来自最近一次 Claude Code init 事件</small></header>
+          <pre id="capabilities-json" class="json-panel">尚未收到能力快照。</pre>
+        </section>
+
+        <section id="view-moments" class="view">
+          <header class="view-header"><h1>QQ 空间</h1><small>本地动态，不会上传到第三方服务</small></header>
+          <div class="moment-compose"><textarea id="moment-text" rows="3" placeholder="说点什么吧……"></textarea><button type="button" id="moment-create" class="primary">发表</button></div>
+          <div id="moment-list" class="card-list"></div>
+        </section>
+      </main>
+
+      <aside id="right-panel">
+        <section class="friends-panel">
+          <header><strong>我的好友 (<span id="friend-count">0</span>)</strong></header>
+          <div id="friend-list" class="friend-list"></div>
+        </section>
+        <details class="side-form">
+          <summary>➕ 添加好友</summary>
+          <label>名字<input id="friend-name" type="text"></label>
+          <label>头像<input id="friend-avatar" type="text" placeholder="emoji，例如 🤖"></label>
+          <label>签名<input id="friend-sign" type="text"></label>
+          <label>人设<textarea id="friend-persona" rows="4"></textarea></label>
+          <label>项目<select id="friend-project"></select></label>
+          <label>模型<select id="friend-model"></select></label>
+          <button type="button" id="friend-create" class="primary">添加</button>
+        </details>
+        <details class="side-form">
+          <summary>✏️ 编辑我的资料</summary>
+          <label>名字<input id="profile-name" type="text"></label>
+          <label>头像<input id="profile-avatar" type="text"></label>
+          <button type="button" id="profile-save" class="primary">保存</button>
+        </details>
+      </aside>
+    </div>
+  </div>
+
+  <div id="task-modal" class="modal-mask" role="dialog" aria-modal="true">
+    <div class="modal">
+      <header><h2>新建任务</h2></header>
+      <label>标题<input id="task-title" type="text" placeholder="可选"></label>
+      <label>项目<select id="task-project"></select></label>
+      <label>模型<select id="task-model"></select></label>
+      <label>权限<select id="task-permission">
+        <option value="default">default</option>
+        <option value="plan">plan</option>
+        <option value="acceptEdits" selected>acceptEdits</option>
+        <option value="bypassPermissions">bypassPermissions</option>
+      </select></label>
+      <label>Prompt<textarea id="task-prompt" rows="8"></textarea></label>
+      <footer><button type="button" id="task-modal-cancel">取消</button><button type="button" id="task-modal-create" class="primary">创建</button></footer>
+    </div>
+  </div>
+
+  <div id="error-toast" class="toast error"></div>
+  <div id="success-toast" class="toast success"></div>
+
+  <script type="module" src="/tasks.js"></script>
+</body>
+</html>
