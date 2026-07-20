@@ -286,6 +286,23 @@ class FriendStore:
             self.document.save(self._friends)
         return deepcopy(friend)
 
+    def update(self, friend_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+        fields = ("name", "avatar", "sign", "persona", "project", "model")
+        with self.lock:
+            for item in self._friends:
+                if item.get("id") == friend_id:
+                    for key in fields:
+                        if key in data:
+                            value = str(data.get(key) or "").strip()
+                            if key == "avatar":
+                                value = value[:64] or item.get("avatar") or "🙂"
+                            elif key == "name":
+                                value = value or item.get("name") or "新朋友"
+                            item[key] = value
+                    self.document.save(self._friends)
+                    return deepcopy(item)
+        return None
+
     def delete(self, friend_id: str) -> None:
         with self.lock:
             self._friends = [item for item in self._friends if item.get("id") != friend_id]

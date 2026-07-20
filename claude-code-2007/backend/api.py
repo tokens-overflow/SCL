@@ -38,7 +38,9 @@ class AppContext:
         self.base_dir = Path(base_dir).resolve()
         self.data_dir = self.base_dir / "data"
         self.frontend_dir = self.base_dir / "frontend"
+        self.avatars_dir = self.frontend_dir / "avatars"
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.avatars_dir.mkdir(parents=True, exist_ok=True)
         self.config_store = ConfigStore(self.base_dir)
         self.config = self.config_store.snapshot()
         self.task_store = TaskStore(self.data_dir)
@@ -156,6 +158,11 @@ def make_handler(context: AppContext) -> Type[BaseHTTPRequestHandler]:
                 if path == "/api/tasks": return self._json(self.app.task_service.list_tasks())
                 if path.startswith("/api/tasks/") and path.endswith("/events"):
                     return self._sse(path.split("/")[3], query)
+                if path == "/api/avatars":
+                    exts = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+                    files = sorted(p.name for p in self.app.avatars_dir.iterdir()
+                                   if p.is_file() and p.suffix.lower() in exts)
+                    return self._json(files)
                 if path == "/api/friends": return self._json(self.app.friends.list())
                 if path == "/api/profile": return self._json(self.app.profile.get())
                 if path == "/api/moments": return self._json(self.app.moments.list())
@@ -257,7 +264,12 @@ def make_handler(context: AppContext) -> Type[BaseHTTPRequestHandler]:
                     return self._json(self.app.friends.add(body))
                 if path.startswith("/api/friends/"):
                     parts = path.split("/")
-                    if len(parts) > 4 and parts[4] == "delete": self.app.friends.delete(parts[3]); return self._json({"ok": True})
+                    action = parts[4] if len(parts) > 4 else ""
+                    if action == "delete": self.app.friends.delete(parts[3]); return self._json({"ok": True})
+                    if action == "update":
+                        updated = self.app.friends.update(parts[3], body)
+                        if updated is None: raise ApiError("好友不存在", 404)
+                        return self._json(updated)
                     raise ApiError("not found", 404)
                 if path == "/api/profile": return self._json(self.app.profile.update(body))
                 if path == "/api/moments":

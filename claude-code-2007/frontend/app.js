@@ -136,7 +136,11 @@ function addResultLine(ev) {
   d.innerHTML = `<span>${ev.is_error ? '❌ 出错' : '✔ 本轮完成'}</span><span>⏱ ${secs}</span>` +
     (cost ? `<span>💰 ${cost}</span>` : '') +
     (ev.num_turns ? `<span>${ev.num_turns} turns</span>` : '') +
-    `<span class="msg-actions" style="margin-left:auto"><span>👍 赞</span><span>👎 踩</span><span>↗ 分享</span></span>`;
+    `<span class="msg-actions" style="margin-left:auto">` +
+      `<span class="react" data-react="like" title="赞">👍 赞</span>` +
+      `<span class="react" data-react="dislike" title="踩：让TA换个思路重答">👎 踩</span>` +
+      `<span class="react" data-react="share" title="复制这条回答">↗ 分享</span>` +
+    `</span>`;
   msgContainer().appendChild(d); scrollBottom();
 }
 function fmtTime(ts) {
@@ -154,7 +158,6 @@ function handleEvent(ev) {
     case 'system':
       if (ev.subtype === 'init') {
         $('#chat-meta').textContent = `模型 ${ev.model || ''} · 会话 ${(ev.session_id||'').slice(0,8)}`;
-        $('#model-chip').textContent = ev.model || $('#model-chip').textContent;
         if (!v.hadFirst) { addSysLine(`—— Claude Code 已上线（${ev.model || ''}）——`); v.hadFirst = true; }
       }
       break;
@@ -200,7 +203,6 @@ function handleEvent(ev) {
 /* ================= 任务列表 / SSE ================= */
 async function loadConfig() {
   CONFIG = await (await fetch('/api/config')).json();
-  $('#model-chip').textContent = CONFIG.default_model;
   const sel = $('#f-project'); sel.innerHTML = '';
   for (const p of CONFIG.projects) {
     const o = document.createElement('option');
@@ -238,7 +240,16 @@ const QQ_AVATARS = [
   { id: 'qq12', svg: '<svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#90a4ae"/><rect x="10" y="15" width="20" height="17" rx="4" fill="#e6ebee"/><rect x="19" y="10" width="2" height="4" fill="#546670"/><circle cx="20" cy="9.3" r="1.7" fill="#ffce54"/><circle cx="16" cy="22" r="2.3" fill="#3aa0ff"/><circle cx="24" cy="22" r="2.3" fill="#3aa0ff"/><rect x="15" y="27" width="10" height="2.2" rx="1.1" fill="#546670"/></svg>' },
 ];
 function avatarSvg(id) { const a = QQ_AVATARS.find(x => x.id === id); return a ? a.svg : null; }
-function avatarHtml(av) { const s = avatarSvg(av); return s || `<span class="emo">${esc(av || '🙂')}</span>`; }
+function avatarHtml(av) {
+  if (av && av.startsWith('img:'))
+    return `<img class="av-img" src="/frontend/avatars/${encodeURIComponent(av.slice(4))}" alt="">`;
+  const s = avatarSvg(av);
+  return s || `<span class="emo">${esc(av || '🙂')}</span>`;
+}
+let IMG_AVATARS = [];   // 头像图片文件名（放在 frontend/avatars/ 下）
+async function loadAvatars() {
+  try { IMG_AVATARS = await (await fetch('/api/avatars')).json(); } catch (e) { IMG_AVATARS = []; }
+}
 
 async function loadFriends() {
   FRIEND_LIST = await (await fetch('/api/friends')).json();
@@ -248,13 +259,46 @@ function renderFriends() {
   const box = $('#friends');
   $('#friends-hd').textContent = `我的好友 (${FRIEND_LIST.length})`;
   box.innerHTML = FRIEND_LIST.map((f, i) =>
-    `<div class="friend" data-friend="${i}" title="点一下跟 ${esc(f.name)} 开聊">
-       <div class="f-ava">${avatarHtml(f.avatar)}</div>
+    `<div class="friend" data-friend="${i}">
+       <div class="f-ava" data-editfriend="${esc(f.id)}">${avatarHtml(f.avatar)}</div>
        <div style="flex:1;min-width:0"><div class="f-name">${esc(f.name)}</div>
        <div class="f-sign">[在线] ${esc(f.sign || '')}</div></div>
        <span class="f-del" data-delfriend="${esc(f.id)}" title="删除好友">✕</span>
      </div>`).join('');
 }
+/* 悬停好友头像/行 —— 显示这个好友主要帮你干啥 */
+function friendTipEl() {
+  let t = document.getElementById('friend-tip');
+  if (!t) { t = document.createElement('div'); t.id = 'friend-tip'; document.body.appendChild(t); }
+  return t;
+}
+function showFriendTip(row) {
+  const f = FRIEND_LIST[+row.dataset.friend];
+  if (!f) return;
+  const role = (f.persona || f.sign || '').trim() || '还没设置人设';
+  const t = friendTipEl();
+  t.innerHTML = `<div class="ft-name">${esc(f.name)}</div>` +
+    `<div class="ft-role">${esc(role)}</div>` +
+    `<div class="ft-hint">点头像编辑资料 · 点名字开聊</div>`;
+  t.classList.add('show');
+  const r = row.getBoundingClientRect();
+  const place = () => {
+    let left = r.left - t.offsetWidth - 10;      // 好友在右栏，气泡放左边
+    if (left < 6) left = r.right + 10;
+    let top = Math.max(6, Math.min(r.top, window.innerHeight - t.offsetHeight - 8));
+    t.style.left = left + 'px'; t.style.top = top + 'px';
+  };
+  place(); requestAnimationFrame(place);
+}
+$('#friends').addEventListener('mouseover', e => {
+  const row = e.target.closest('.friend'); if (row) showFriendTip(row);
+});
+$('#friends').addEventListener('mouseout', e => {
+  const to = e.relatedTarget;
+  if (!to || !(to.closest && to.closest('.friend'))) {
+    const t = document.getElementById('friend-tip'); if (t) t.classList.remove('show');
+  }
+});
 async function startFriendChat(f) {
   if (!f) return;
   const proj = f.project || (CONFIG.projects[0] || {}).name || '';
@@ -275,13 +319,20 @@ async function deleteFriend(id) {
 /* 添加好友弹窗 */
 /* 头像选择器（好友弹窗 & 我的资料弹窗共用）：看图选择，或输入 emoji */
 function buildAvatarGrid(grid, selectedId) {
-  grid.dataset.sel = selectedId || QQ_AVATARS[0].id;
-  grid.innerHTML = QQ_AVATARS.map(a =>
+  const first = IMG_AVATARS.length ? 'img:' + IMG_AVATARS[0] : (QQ_AVATARS[0] && QQ_AVATARS[0].id);
+  grid.dataset.sel = selectedId || first;
+  const imgCells = IMG_AVATARS.map(fn => {
+    const id = 'img:' + fn;
+    return `<div class="av-cell${id === grid.dataset.sel ? ' sel' : ''}" data-avpick="${esc(id)}"><img class="av-img" src="/frontend/avatars/${encodeURIComponent(fn)}" alt=""></div>`;
+  }).join('');
+  // 只用生成的头像；万一头像文件夹为空才退回内置 SVG，避免选择器空白
+  const svgCells = IMG_AVATARS.length ? '' : QQ_AVATARS.map(a =>
     `<div class="av-cell${a.id === grid.dataset.sel ? ' sel' : ''}" data-avpick="${a.id}">${a.svg}</div>`).join('');
+  grid.innerHTML = imgCells + svgCells;
 }
 function pickedAvatar(grid, emojiInput) {
   const emo = emojiInput.value.trim();
-  return emo || grid.dataset.sel || QQ_AVATARS[0].id;
+  return emo || grid.dataset.sel || (IMG_AVATARS.length ? 'img:' + IMG_AVATARS[0] : (QQ_AVATARS[0] && QQ_AVATARS[0].id));
 }
 document.addEventListener('click', e => {
   const cell = e.target.closest('.av-cell[data-avpick]');
@@ -291,14 +342,29 @@ document.addEventListener('click', e => {
   [...grid.children].forEach(c => c.classList.toggle('sel', c === cell));
   const emo = grid.closest('.modal') && grid.closest('.modal').querySelector('.av-emoji');
   if (emo) emo.value = '';
+  if (grid.id === 'fr-avatar-grid') renderBigAva(cell.dataset.avpick);   // 同步大头像预览
 });
 
-function openFriendModal() {
-  buildAvatarGrid($('#fr-avatar-grid'), 'qq2');
+let editingFriendId = null;
+function renderBigAva(av) { $('#fr-bigava').innerHTML = avatarHtml(av); }
+function openFriendModal(friend) {
+  editingFriendId = friend ? friend.id : null;
+  const selAv = friend && (friend.avatar || '').startsWith('img:') ? friend.avatar : undefined;
+  buildAvatarGrid($('#fr-avatar-grid'), selAv);
+  $('#fr-name').value = friend ? (friend.name || '') : '';
+  $('#fr-sign').value = friend ? (friend.sign || '') : '';
+  $('#fr-persona').value = friend ? (friend.persona || '') : '';
+  $('#fr-avatar').value = (friend && !avatarSvg(friend.avatar) && !(friend.avatar || '').startsWith('img:')) ? (friend.avatar || '') : '';
+  if (friend && friend.project) $('#fr-project').value = friend.project;
+  if (friend && friend.model) $('#fr-model').value = friend.model;
+  renderBigAva(friend ? friend.avatar : $('#fr-avatar-grid').dataset.sel);
+  $('#fr-mtitle').textContent = friend ? '👤 好友资料 / 编辑' : '➕ 添加好友';
+  $('#fr-ok').textContent = friend ? '保存' : '添加';
+  $('#fr-del').style.display = friend ? '' : 'none';
   $('#friend-mask').classList.add('show');
   $('#fr-name').focus();
 }
-function closeFriendModal() { $('#friend-mask').classList.remove('show'); }
+function closeFriendModal() { $('#friend-mask').classList.remove('show'); editingFriendId = null; }
 async function createFriend() {
   const name = $('#fr-name').value.trim();
   if (!name) { $('#fr-name').focus(); return; }
@@ -306,11 +372,19 @@ async function createFriend() {
     name, avatar: pickedAvatar($('#fr-avatar-grid'), $('#fr-avatar')), sign: $('#fr-sign').value.trim(),
     persona: $('#fr-persona').value.trim(), project: $('#fr-project').value, model: $('#fr-model').value,
   };
-  const res = await fetch('/api/friends', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const url = editingFriendId ? `/api/friends/${editingFriendId}/update` : '/api/friends';
+  const res = await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
   const f = await res.json();
   if (f.error) { alert(f.error); return; }
   closeFriendModal();
   ['#fr-name', '#fr-avatar', '#fr-sign', '#fr-persona'].forEach(s => $(s).value = '');
+  loadFriends();
+}
+async function deleteEditingFriend() {
+  if (!editingFriendId) return;
+  if (!confirm('删除这个好友？（不影响已有的聊天信息）')) return;
+  await fetch(`/api/friends/${editingFriendId}/delete`, { method: 'POST' });
+  closeFriendModal();
   loadFriends();
 }
 
@@ -325,8 +399,10 @@ function renderMe() {
 }
 function openProfileModal() {
   $('#pf-name').value = ME.name || '';
-  $('#pf-avatar').value = avatarSvg(ME.avatar) ? '' : (ME.avatar || '');
-  buildAvatarGrid($('#pf-avatar-grid'), avatarSvg(ME.avatar) ? ME.avatar : 'qq1');
+  const isImg = !!(ME.avatar && ME.avatar.startsWith('img:'));
+  const isSvg = !!avatarSvg(ME.avatar);
+  $('#pf-avatar').value = (isImg || isSvg) ? '' : (ME.avatar || '');  // 只有纯 emoji 才回填自定义框
+  buildAvatarGrid($('#pf-avatar-grid'), isImg ? ME.avatar : undefined);  // img 头像选中它，否则默认第一个
   $('#profile-mask').classList.add('show');
   $('#pf-name').focus();
 }
@@ -380,18 +456,18 @@ async function togglePinChat(id) {
   const t = TASKS.find(x => x.id === id); if (!t) return;
   const res = await fetch(`/api/tasks/${id}/pin`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ pinned: !t.pinned }) });
   const nt = await res.json(); if (nt.error) return;
-  t.pinned = nt.pinned; renderTaskList($('#search-input').value.trim());
+  t.pinned = nt.pinned; renderTaskList('');
 }
 async function deleteChat(id) {
   if (!confirm('删除这条聊天信息？（不可恢复）')) return;
   await fetch(`/api/tasks/${id}/delete`, { method: 'POST' });
   TASKS = TASKS.filter(x => x.id !== id);
   if (currentTaskId === id) { currentTaskId = null; if (es) { es.close(); es = null; } msgContainer().innerHTML = '<div id="empty-state"><div class="big">🐧</div><p>选一条聊天信息，或点右边好友开聊～</p></div>'; $('#chat-title').textContent = '欢迎使用'; }
-  renderTaskList($('#search-input').value.trim());
+  renderTaskList('');
 }
 function setTaskStatus(id, status) {
   const t = TASKS.find(x => x.id === id);
-  if (t) { t.status = status; renderTaskList($('#search-input').value.trim()); }
+  if (t) { t.status = status; renderTaskList(''); }
   $('#stop-btn').classList.toggle('show', status === 'running');
 }
 function openTask(id) {
@@ -407,11 +483,10 @@ function openTask(id) {
   $('#chat-title').textContent = t ? t.title : '';
   $('#win-title').textContent = `Claude Code 2007 - ${t ? t.title : ''}`;
   $('#chat-meta').textContent = t && t.model ? `模型 ${t.model}` : '';
-  if (t && t.model) $('#model-chip').textContent = t.model;
   msgContainer().innerHTML = '';
   view = newView();
   renderedCount = 0;
-  renderTaskList($('#search-input').value.trim());
+  renderTaskList('');
   $('#stop-btn').classList.toggle('show', t && t.status === 'running');
   if (es) { es.close(); es = null; }
   es = new EventSource(`/api/tasks/${id}/events`);
@@ -476,6 +551,49 @@ async function sendMessage() {
   } finally { sending = false; $('#send-btn').disabled = false; }
 }
 
+/* 赞 / 踩 / 分享 —— 让它们真正发挥作用 */
+function handleReact(el) {
+  const actions = el.closest('.msg-actions');
+  const kind = el.dataset.react;
+  if (kind === 'like') {
+    const on = !actions.classList.contains('liked');
+    actions.classList.toggle('liked', on); actions.classList.remove('disliked');
+    toast(on ? '已赞 👍' : '已取消');
+  } else if (kind === 'dislike') {
+    const on = !actions.classList.contains('disliked');
+    actions.classList.toggle('disliked', on); actions.classList.remove('liked');
+    if (on && currentTaskId && confirm('这条不太满意？让 TA 换个思路重新回答一次。')) {
+      sendToCurrent('刚才那条回答我不太满意，请换个思路、重新回答一次。');
+    }
+  } else if (kind === 'share') {
+    const line = el.closest('.result-line');
+    let node = line ? line.previousElementSibling : null;
+    while (node && !(node.classList && node.classList.contains('agent'))) node = node.previousElementSibling;
+    const body = node && node.querySelector('.m-body');
+    const text = body ? body.innerText.trim() : '';
+    if (text) navigator.clipboard.writeText(text).then(() => toast('已复制这条回答 📋'));
+    else toast('没找到可复制的内容');
+  }
+}
+async function sendToCurrent(text) {
+  if (!currentTaskId || sending) return;
+  sending = true;
+  try {
+    const res = await fetch(`/api/tasks/${currentTaskId}/message`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text }) });
+    const t = await res.json();
+    if (t.error) { alert(t.error); return; }
+    setTaskStatus(currentTaskId, 'running');
+  } finally { sending = false; }
+}
+let toastTimer;
+function toast(msg) {
+  let t = document.getElementById('mini-toast');
+  if (!t) { t = document.createElement('div'); t.id = 'mini-toast'; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1600);
+}
+
 document.addEventListener('click', e => {
   const act = e.target.closest('[data-act]');
   if (act) {
@@ -492,7 +610,9 @@ document.addEventListener('click', e => {
     else if (a === 'todo') { showView('chat'); addSysLine('🚧 该功能敬请期待（v2）'); }
     return;
   }
-  // 点好友 = 跟该人设开聊
+  // 点头像 = 看大图 + 编辑资料；点删除 = 删好友；点其余 = 开聊
+  const ef = e.target.closest('[data-editfriend]');
+  if (ef) { e.stopPropagation(); openFriendModal(FRIEND_LIST.find(x => x.id === ef.dataset.editfriend)); return; }
   const df = e.target.closest('[data-delfriend]');
   if (df) { e.stopPropagation(); deleteFriend(df.dataset.delfriend); return; }
   const fr = e.target.closest('[data-friend]');
@@ -522,6 +642,8 @@ document.addEventListener('click', e => {
   if (run) { runSchedule(run.dataset.run); return; }
   const del = e.target.closest('[data-del]');
   if (del) { deleteSchedule(del.dataset.del); return; }
+  const react = e.target.closest('.react[data-react]');
+  if (react) { handleReact(react); return; }
   const copy = e.target.closest('.cb-copy');
   if (copy) {
     navigator.clipboard.writeText(copy.dataset.code).then(() => {
@@ -562,7 +684,6 @@ $('#stop-btn').onclick = async () => {
   setTaskStatus(currentTaskId, 'idle');
   addSysLine('⏹ 已停止');
 };
-$('#search-input').addEventListener('input', e => renderTaskList(e.target.value.trim()));
 
 /* ================= 斜杠命令自动补全 ================= */
 async function loadSlash() {
@@ -646,7 +767,7 @@ function renderAttachPop() {
   const quick = (CONFIG.projects || []).map(p => p.abspath).filter(d => d && d !== t.cwd && !dirs.includes(d));
   attachPop.innerHTML =
     '<div class="ap-hd">本任务里 Claude 可访问的目录（额外授权 --add-dir）：</div>' +
-    `<div class="ap-row"><span class="ap-path ap-cwd" title="${esc(t.cwd)}">📁 ${esc(t.cwd)}</span><span style="font-size:10px;color:#8aa">主目录</span></div>` +
+    `<div class="ap-row"><span class="ap-path ap-cwd" title="${esc(t.cwd)}">📁 ${esc(t.cwd)}</span><span style="font-size:12px;color:#8aa">主目录</span></div>` +
     dirs.map(d => `<div class="ap-row"><span class="ap-path" title="${esc(d)}">➕ ${esc(d)}</span><span class="ap-rm" data-rmdir="${esc(d)}" title="移除">✕</span></div>`).join('') +
     (quick.length ? '<div class="ap-quick">' + quick.map(d => `<span class="ap-chip" data-adddir="${esc(d)}">+ ${esc(d.split('/').pop() || d)}</span>`).join('') + '</div>' : '') +
     '<div class="ap-add"><input id="ap-input" placeholder="输入/粘贴目录路径，支持 ~"><button class="mini-btn" id="ap-add-btn">添加</button></div>';
@@ -987,7 +1108,7 @@ async function loadCapabilities() {
     : '<span class="cap-empty" style="padding:6px">（无）</span>';
   const mcp = (c.mcp_servers || []);
   const mcpChips = mcp.length
-    ? mcp.map(m => `<span class="cap-chip"><span class="dot ${statusClass(m.status)}"></span>${esc(m.name)} <span style="color:#8aa;font-size:11px">${esc(m.status||'')}</span></span>`).join('')
+    ? mcp.map(m => `<span class="cap-chip"><span class="dot ${statusClass(m.status)}"></span>${esc(m.name)} <span style="color:#8aa;font-size:13px">${esc(m.status||'')}</span></span>`).join('')
     : '<span class="cap-empty" style="padding:6px">（无）</span>';
   body.innerHTML =
     sec('🔌', 'MCP 服务器', mcp.length, mcpChips) +
@@ -1111,6 +1232,8 @@ $('#md-save-btn').onclick = saveClaudeMd;
 $('#fr-ok').onclick = createFriend;
 $('#fr-cancel').onclick = closeFriendModal;
 $('#fr-close').onclick = closeFriendModal;
+$('#fr-del').onclick = deleteEditingFriend;
+$('#fr-avatar').addEventListener('input', () => { if ($('#fr-avatar').value.trim()) renderBigAva($('#fr-avatar').value.trim()); });
 $('#usercard').onclick = openProfileModal;
 $('#pf-ok').onclick = saveProfile;
 $('#pf-cancel').onclick = closeProfileModal;
@@ -1201,7 +1324,7 @@ setInterval(async () => {
   const fresh = await (await fetch('/api/tasks')).json();
   for (const f of fresh) {
     const t = TASKS.find(x => x.id === f.id);
-    if (t && t.status !== f.status) { t.status = f.status; renderTaskList($('#search-input').value.trim()); }
+    if (t && t.status !== f.status) { t.status = f.status; renderTaskList(''); }
     if (!t) TASKS.unshift(f);
   }
 }, 5000);
@@ -1210,6 +1333,7 @@ setInterval(async () => {
 (async () => {
   await loadConfig();
   await loadSlash();
+  await loadAvatars();
   await loadProfile();
   await loadFriends();
   await loadTasks();

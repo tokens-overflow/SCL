@@ -83,8 +83,7 @@
         <textarea id="prompt" placeholder="要求后续变更…（Ctrl+Enter 发送）"></textarea>
         <div id="send-row">
           <span style="color:#93a5ba">连按两次 Ctrl+Enter 也不会重复发送，放心敲</span>
-          <div id="model-badge">⚙ <span class="chip" id="model-chip">sonnet</span></div>
-          <button id="send-btn">发送(S) ▾</button>
+          <button id="send-btn" style="margin-left:auto">发送(S) ▾</button>
         </div>
       </div>
 
@@ -103,7 +102,7 @@
         <div class="cview-hd">
           <span class="cv-title">🧩 插件 · 能力面板</span>
           <span class="spacer"></span>
-          <span id="plugins-meta" style="font-size:11px;color:#5a7699"></span>
+          <span id="plugins-meta" style="font-size:13px;color:#5a7699"></span>
         </div>
         <div class="cview-body"><div id="plugins-body"></div></div>
       </div>
@@ -123,7 +122,7 @@
         <div class="cview-hd">
           <span class="cv-title">🎮 QQ小游戏</span>
           <span class="spacer"></span>
-          <span id="game-score" style="font-size:12px;color:#5a7699"></span>
+          <span id="game-score" style="font-size:14px;color:#5a7699"></span>
           <button class="mini-btn" id="game-back" style="display:none">↩ 游戏大厅</button>
         </div>
         <div class="cview-body">
@@ -141,7 +140,7 @@
         <div class="cview-hd">
           <span class="cv-title">🌟 QQ空间</span>
           <span class="spacer"></span>
-          <span id="qz-me" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#14467e"></span>
+          <span id="qz-me" style="display:flex;align-items:center;gap:6px;font-size:14px;color:#14467e"></span>
         </div>
         <div class="cview-body">
           <div id="qz-post">
@@ -170,28 +169,6 @@
 
     <!-- 右栏 -->
     <div id="right" class="panel">
-      <div class="group-hd"><span>Claude 好友</span><span class="arrow">⤢</span></div>
-      <div id="mascot-box">
-        <!-- 像素风小蓝吉祥物 -->
-        <svg width="128" height="140" viewBox="0 0 64 70" shape-rendering="crispEdges">
-          <rect x="14" y="4" width="36" height="30" rx="7" fill="#3b7de0"/>
-          <rect x="12" y="8" width="4" height="12" rx="2" fill="#3b7de0"/>
-          <rect x="48" y="8" width="4" height="12" rx="2" fill="#3b7de0"/>
-          <rect x="19" y="10" width="26" height="17" rx="3" fill="#0d2b52"/>
-          <path d="M24 14l4 3.5-4 3.5" stroke="#7ef0ff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-          <rect x="31" y="19" width="8" height="2.4" rx="1.2" fill="#7ef0ff"/>
-          <rect x="20" y="34" width="24" height="22" rx="8" fill="#4b8ae8"/>
-          <rect x="26" y="38" width="12" height="9" rx="3" fill="#bfe0ff"/>
-          <rect x="12" y="38" width="8" height="14" rx="4" fill="#3b7de0"/>
-          <rect x="44" y="38" width="8" height="14" rx="4" fill="#3b7de0"/>
-          <rect x="22" y="56" width="8" height="9" rx="3.5" fill="#2c66c4"/>
-          <rect x="34" y="56" width="8" height="9" rx="3.5" fill="#2c66c4"/>
-        </svg>
-      </div>
-      <div id="profile-card">
-        <div><span class="pname">Claude 小蓝</span><span class="lv">LV·07</span></div>
-        <div style="margin-top:4px">代码有问题？找我！<br>我是你的智能伙伴 Claude<br>陪你写代码，改 Bug，<br>查文档，超可靠哒！</div>
-      </div>
       <div class="group-hd"><span id="friends-hd">我的好友</span><span class="arrow">▲</span></div>
       <div id="friends"></div>
     </div>
@@ -199,8 +176,7 @@
 
   <!-- 状态栏 -->
   <div id="statusbar">
-    <div id="searchbox">🔍 <input placeholder="搜索任务…" id="search-input"></div>
-    <div class="sb-right">
+    <div class="sb-right" style="margin-left:auto">
       <span id="conn-dot">🛡️ 安全</span>
       <span>📶</span>
       <span id="clock"></span>
@@ -274,14 +250,15 @@
 <!-- 添加好友弹窗 -->
 <div id="friend-mask" class="modal-mask">
   <div class="modal">
-    <div class="m-title">➕ 添加好友<div class="winbtn close" id="fr-close">✕</div></div>
+    <div class="m-title"><span id="fr-mtitle">➕ 添加好友</span><div class="winbtn close" id="fr-close">✕</div></div>
     <div class="m-body-form">
+      <div id="fr-bigava" title="当前头像"></div>
       <label><span class="lab">名字：</span><input type="text" id="fr-name" placeholder="例如：小美 / 老王 / 产品经理 Lisa"></label>
       <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">头像：</span>
         <div style="flex:1">
           <div id="fr-avatar-grid" class="avatar-grid"></div>
           <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
-            <span style="color:#789;font-size:11px">或用 emoji</span>
+            <span style="color:#789;font-size:13px">或用 emoji</span>
             <input type="text" id="fr-avatar" class="av-emoji" maxlength="4" style="max-width:70px" placeholder="🙂">
           </div>
         </div>
@@ -292,6 +269,7 @@
       <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">性格：</span><textarea id="fr-persona" placeholder="设定这个好友的人设/说话风格。例如：你是资深后端老王，讲话像带徒弟，先讲原理再给方案。"></textarea></label>
     </div>
     <div class="m-foot">
+      <button class="xp-btn" id="fr-del" style="display:none;margin-right:auto;color:#c0392b">删除好友</button>
       <button class="xp-btn" id="fr-ok">添加</button>
       <button class="xp-btn" id="fr-cancel">取消</button>
     </div>
@@ -324,7 +302,7 @@
         <div style="flex:1">
           <div id="pf-avatar-grid" class="avatar-grid"></div>
           <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
-            <span style="color:#789;font-size:11px">或用 emoji</span>
+            <span style="color:#789;font-size:13px">或用 emoji</span>
             <input type="text" id="pf-avatar" class="av-emoji" maxlength="4" style="max-width:70px" placeholder="🙂">
           </div>
         </div>
