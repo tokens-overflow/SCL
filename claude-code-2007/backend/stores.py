@@ -1,4 +1,4 @@
-"""Persistence and filesystem adapters for Claude Code 2007.
+"""Persistence and filesystem adapters for QQQQC.
 
 All JSON writes are atomic and all mutable stores own their own lock.  The
 service layer depends on these small adapters instead of touching files

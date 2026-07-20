@@ -481,7 +481,7 @@ function openTask(id) {
   };
   $('#chat-avatar').innerHTML = avatarHtml(currentAgent.avatar);
   $('#chat-title').textContent = t ? t.title : '';
-  $('#win-title').textContent = `Claude Code 2007 - ${t ? t.title : ''}`;
+  $('#win-title').textContent = `QQQQC - ${t ? t.title : ''}`;
   $('#chat-meta').textContent = t && t.model ? `模型 ${t.model}` : '';
   msgContainer().innerHTML = '';
   view = newView();

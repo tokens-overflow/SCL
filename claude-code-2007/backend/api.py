@@ -1,4 +1,4 @@
-"""HTTP transport and application composition for Claude Code 2007."""
+"""HTTP transport and application composition for QQQQC."""
 from __future__ import annotations
 
 import json
@@ -345,7 +345,7 @@ def open_app_window(url: str, data_dir: Path | None = None) -> None:
 def serve(context: AppContext, port: int = 8787, *, app_mode: bool = False) -> None:
     server = QuietHTTPServer(("127.0.0.1", port), make_handler(context))
     url = f"http://localhost:{port}"
-    print(f"Claude Code 2007 已启动: {url}")
+    print(f"QQQQC 已启动: {url}")
     if app_mode:
         threading.Timer(0.6, open_app_window, args=(url, context.data_dir)).start()
     try:

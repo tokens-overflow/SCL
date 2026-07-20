@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code 2007 —— 无边框原生窗口版。
+"""QQQQC —— 无边框原生窗口版。
 
 用 pywebview 把界面套进一个 frameless 的原生窗口：没有 macOS 那条灰色标题栏，
 只剩下界面里那条蓝色 QQ 风标题栏，效果跟当年的 QQ 一模一样。窗口拖动靠标题栏
@@ -114,11 +114,11 @@ def main():
         return
 
     start_server(port)
-    print(f"Claude Code 2007（无边框）已启动: http://localhost:{port}")
+    print(f"QQQQC（无边框）已启动: http://localhost:{port}")
 
     api = WindowApi()
     api.window = webview.create_window(
-        "Claude Code 2007",
+        "QQQQC",
         f"http://localhost:{port}",
         width=980, height=760, min_size=(720, 520),
         frameless=True,        # 去掉原生边框和标题栏
