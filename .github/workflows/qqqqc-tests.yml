@@ -1,4 +1,4 @@
-name: Claude Code 2007 Refactor
+name: QQQQC Tests
 
 on:
   push:
@@ -6,15 +6,15 @@ on:
       - agent/refactor-claude-code-2007-modules
   pull_request:
     paths:
-      - 'claude-code-2007/**'
-      - '.github/workflows/claude-code-2007-refactor.yml'
+      - 'QQQQC/**'
+      - '.github/workflows/qqqqc-tests.yml'
 
 jobs:
   test:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: claude-code-2007
+        working-directory: QQQQC
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,10 +26,6 @@ jobs:
       - name: Python syntax
         run: python -m py_compile server.py backend/*.py
       - name: JavaScript syntax
-        run: |
-          node --check frontend/api.js
-          node --check frontend/chat.js
-          node --check frontend/tasks.js
-          node --check frontend/scheduler.js
+        run: node --check frontend/app.js
       - name: Smoke tests
         run: python -W error::ResourceWarning -m unittest discover -s tests -v
