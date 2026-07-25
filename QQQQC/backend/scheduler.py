@@ -59,6 +59,13 @@ class Scheduler:
 
     @staticmethod
     def compute_next(item: dict[str, Any], after: float | None = None) -> float | None:
+        """下一次触发的 epoch 秒。支持三种类型：
+        - interval：每 N 分钟。以 last_run(或 created_at) 为基准 +N 分钟；若已过期则
+          按整段跳到未来最近一次（避免程序停机后一次性补跑很多次）。
+        - daily：每天 HH:MM。取今天该时刻，若已过则顺延到明天。
+        - once：一次性，直接用 at_datetime；无值则返回 None(不再触发)。
+        `after` 用于以某个时间点为基准重算(测试/补算用)。返回 None 表示不安排。
+        """
         now = after if after is not None else time.time()
         schedule_type = item.get("sched_type")
         if schedule_type == "interval":
@@ -152,6 +159,8 @@ class Scheduler:
                 model=snapshot.get("model"),
                 permission_mode=snapshot.get("permission_mode"),
                 prompt=snapshot.get("prompt", ""),
+                agent_name="定时任务",
+                agent_avatar="📅",   # 定时任务的回复用小日历图标
             )
             error = None
         except Exception as exc:

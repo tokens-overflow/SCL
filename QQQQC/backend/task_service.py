@@ -6,6 +6,7 @@ scheduler persistence.
 """
 from __future__ import annotations
 
+import json
 import os
 import queue
 import threading
@@ -65,6 +66,10 @@ class TaskService:
         self._handles: dict[str, SessionHandle] = {}
         self._subscribers: dict[str, set[queue.Queue[dict[str, Any]]]] = {}
         self._cancelled: set[str] = set()
+        # 权限 control protocol 用。request_id -> {task_id, tool_name, input}（UI 応答待ち）と、
+        # 「本会话都允许」で許可済みのツール名（task_id -> set）。
+        self._perm_pending: dict[str, dict[str, Any]] = {}
+        self._perm_session_allow: dict[str, set[str]] = {}
         self._event_seq = {
             task["id"]: max(int(task.get("event_seq") or 0), self.events.max_seq(task["id"]))
             for task in self.tasks.list()
@@ -262,6 +267,9 @@ class TaskService:
             handle = self._handles.pop(task_id, None)
             self._cancelled.add(task_id)
             self._subscribers.pop(task_id, None)
+            self._perm_session_allow.pop(task_id, None)
+            for rid in [r for r, p in self._perm_pending.items() if p.get("task_id") == task_id]:
+                self._perm_pending.pop(rid, None)
         if handle is not None and handle.is_alive():
             handle.terminate()
         self.tasks.remove(task_id)
@@ -279,7 +287,7 @@ class TaskService:
             if str(directory) != task.get("cwd") and str(directory) not in dirs:
                 dirs.append(str(directory))
         task = self.tasks.mutate(task_id, update)
-        self._restart_for_directory_change(task_id, f"已添加允许访问目录：{directory}（下条消息起生效）")
+        self._restart_session(task_id, f"已添加允许访问目录：{directory}（下条消息起生效）")
         return task
 
     def remove_dir(self, task_id: str, path: str) -> dict[str, Any]:
@@ -288,12 +296,110 @@ class TaskService:
             if path in dirs:
                 dirs.remove(path)
         task = self.tasks.mutate(task_id, update)
-        self._restart_for_directory_change(task_id, f"已移除允许访问目录：{path}（下条消息起生效）")
+        self._restart_session(task_id, f"已移除允许访问目录：{path}（下条消息起生效）")
         return task
 
-    def _restart_for_directory_change(self, task_id: str, note: str) -> None:
+    def set_permission_mode(self, task_id: str, mode: str) -> dict[str, Any]:
+        # 権限モードは claude 起動時の --permission-mode フラグ。実行中プロセスは
+        # 変更できないため、タスクに保存して(ディレクトリ変更と同じく)プロセスを落とし、
+        # 次メッセージ送信時に --resume で新モードで再起動させる。
+        valid = {"default", "plan", "acceptEdits", "bypassPermissions"}
+        if mode not in valid:
+            raise ValueError(f"未知的权限模式: {mode}")
+
+        def update(task: dict[str, Any]) -> None:
+            task["permission_mode"] = mode
+        task = self.tasks.mutate(task_id, update)
+        self._restart_session(task_id, f"已切换权限模式：{mode}（下条消息起生效）")
+        return task
+
+    # ---------- 权限 control protocol ----------
+    def _on_control(self, task_id: str, ev: dict[str, Any]) -> None:
+        """claude からの control_request を処理する。can_use_tool なら
+        全自动=即 allow / 本会话已允许=即 allow / それ以外は UI に問い合わせる。"""
+        request_id = ev.get("request_id")
+        req = ev.get("request") or {}
+        if req.get("subtype") != "can_use_tool":
+            # 未知の control_request は空 success を返して claude を待たせない。
+            self._send_control(task_id, request_id, {})
+            return
+        tool_name = str(req.get("tool_name") or "?")
+        tool_input = req.get("input") or {}
+        task = self.tasks.get(task_id) or {}
+        with self.lock:
+            session_ok = tool_name in self._perm_session_allow.get(task_id, set())
+        if task.get("permission_mode") == "bypassPermissions" or session_ok:
+            self._respond_permission(task_id, request_id, tool_input, "allow")
+            return
+        # UI に確認カードを出し、応答は resolve_permission で返す。
+        with self.lock:
+            self._perm_pending[str(request_id)] = {
+                "task_id": task_id, "tool_name": tool_name, "input": tool_input,
+            }
+        self.emit(task_id, {
+            "type": "x-perm-req", "request_id": request_id,
+            "tool_name": tool_name, "preview": self._perm_preview(tool_name, tool_input),
+        })
+
+    def resolve_permission(self, task_id: str, request_id: str,
+                           behavior: str, scope: str = "once") -> dict[str, Any]:
+        with self.lock:
+            pending = self._perm_pending.pop(request_id, None)
+            if pending is not None and behavior == "allow" and scope == "session":
+                self._perm_session_allow.setdefault(task_id, set()).add(pending.get("tool_name"))
+        if pending is None:
+            return {"ok": False, "error": "该权限请求已失效"}
+        self._respond_permission(task_id, request_id, pending.get("input") or {}, behavior)
+        self.emit(task_id, {"type": "x-perm-resolved", "request_id": request_id, "behavior": behavior})
+        return {"ok": True}
+
+    def _respond_permission(self, task_id: str, request_id: Any,
+                            tool_input: dict[str, Any], behavior: str) -> None:
+        if behavior == "allow":
+            response = {"behavior": "allow", "updatedInput": tool_input}
+        else:
+            response = {"behavior": "deny", "message": "用户拒绝了此操作"}
+        self._send_control(task_id, request_id, response)
+
+    def _send_control(self, task_id: str, request_id: Any, response: dict[str, Any]) -> None:
         with self.lock:
             handle = self._handles.get(task_id)
+        if handle is not None and handle.is_alive():
+            try:
+                handle.send_control_response(str(request_id), response)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _perm_preview(tool_name: str, tool_input: dict[str, Any]) -> str:
+        if tool_name in ("Bash", "PowerShell"):
+            return str(tool_input.get("command") or "")[:400]
+        if tool_name in ("Write", "Edit", "NotebookEdit", "Read"):
+            return str(tool_input.get("file_path") or "")
+        try:
+            return json.dumps(tool_input, ensure_ascii=False)[:300]
+        except Exception:
+            return ""
+
+    def set_model(self, task_id: str, model: str) -> dict[str, Any]:
+        """切换这个会话用的模型。CLI 的 --model 是启动时定死的，所以先杀掉当前子进程，
+        下一条消息会带 --resume 用新模型接上同一个会话，聊天记录不丢。"""
+        model = (model or "").strip()
+        if not model:
+            raise ValueError("模型不能为空")
+        task = self.get_task(task_id)
+        if task.get("model") == model:
+            return task
+        task = self.tasks.mutate(task_id, lambda item: item.update(model=model))
+        self._restart_session(task_id, f"模型已切换为 {model}（下条消息起生效，会话继续）")
+        return task
+
+    def _restart_session(self, task_id: str, note: str) -> None:
+        with self.lock:
+            # pop で確実に取り除く。get のままだと terminate 後もハンドルが残り、
+            # プロセスがまだ生きていると次の送信で旧設定(旧権限モード)のまま再利用され、
+            # 権限切替が効かない。pop すれば次の送信は必ず新設定で spawn し直す。
+            handle = self._handles.pop(task_id, None)
             self._cancelled.add(task_id)
         self.tasks.mutate(task_id, lambda item: item.update(status="idle", updated_at=time.time()))
         if handle is not None and handle.is_alive():
@@ -336,6 +442,7 @@ class TaskService:
             on_event=lambda event: self._on_cli_event(task_id, event),
             on_error=lambda text: self._on_cli_error(task_id, text),
             on_exit=lambda code: self._on_cli_exit(task_id, code),
+            on_control=lambda ev: self._on_control(task_id, ev),
         )
         with self.lock:
             self._handles[task_id] = handle

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import shutil
 import tempfile
@@ -21,9 +22,15 @@ from typing import Any, Callable, Iterable
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "user_name": "我",
-    "default_model": "sonnet",
-    "default_permission_mode": "acceptEdits",
-    "models": ["sonnet", "opus", "haiku"],
+    "default_model": "claude-opus-4-8",
+    "default_permission_mode": "bypassPermissions",
+    # 字符串是 CLI 别名（总是指向该档最新）；对象形式可以钉死具体版本并自定义显示名
+    "models": [
+        {"id": "claude-opus-4-8", "label": "Opus 4.8"},
+        {"id": "claude-opus-5", "label": "Opus 5"},
+        {"id": "sonnet", "label": "Sonnet（最新）"},
+        {"id": "haiku", "label": "Haiku（快·便宜）"},
+    ],
     "projects": [{"name": "当前目录", "path": ".", "pinned": True}],
     "friends": [
         {
@@ -49,7 +56,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 
 def atomic_write_text(path: Path, text: str) -> None:
-    """Write *text* atomically, preserving the previous file on failure."""
+    """原子写文件：先写同目录临时文件并 fsync 落盘，再用 os.replace 原子替换目标。
+    这样即使写到一半崩溃/断电，原文件也不会被截断损坏（要么旧内容、要么新内容）。
+    所有本地 JSON 仓库(任务/好友/动态/资料/定时/能力快照)都经由此函数落盘。"""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
     tmp_path = Path(tmp_name)
@@ -257,14 +266,32 @@ class CapabilityStore:
 
 
 class FriendStore:
-    def __init__(self, data_dir: Path, seeds: Iterable[dict[str, Any]]):
+    IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+    def __init__(self, data_dir: Path, seeds: Iterable[dict[str, Any]],
+                 avatars_dir: Path | None = None):
         self.document = JsonStore(data_dir / "friends.json", list)
         self.lock = threading.RLock()
         loaded = self.document.load()
         if loaded:
             self._friends = [dict(item) for item in loaded if isinstance(item, dict)]
         else:
-            self._friends = [{**item, "id": uuid.uuid4().hex[:8]} for item in seeds]
+            # 首次启动（还没有 friends.json）：给默认 claude 化身随机分配一个内置图像头像
+            imgs = []
+            if avatars_dir:
+                try:
+                    imgs = [p.name for p in Path(avatars_dir).iterdir()
+                            if p.is_file() and p.suffix.lower() in self.IMG_EXTS]
+                except OSError:
+                    imgs = []
+            random.shuffle(imgs)
+            seeded = []
+            for i, item in enumerate(seeds):
+                it = {**item, "id": uuid.uuid4().hex[:8]}
+                if imgs:
+                    it["avatar"] = "img:" + imgs[i % len(imgs)]   # 不重复地随机指派
+                seeded.append(it)
+            self._friends = seeded
             self.document.save(self._friends)
 
     def list(self) -> list[dict[str, Any]]:
@@ -493,9 +520,15 @@ class ClaudeMdStore:
     def __init__(self, config: ConfigStore):
         self.config = config
 
+    GLOBAL = "__global__"   # 全局 CLAUDE.md：~/.claude/CLAUDE.md
+
+    def _path_for(self, project: str, *, fallback_to_cwd: bool) -> Path:
+        if project == self.GLOBAL:
+            return Path.home() / ".claude" / "CLAUDE.md"
+        return self.config.resolve_project(project, fallback_to_cwd=fallback_to_cwd) / "CLAUDE.md"
+
     def read(self, project: str) -> dict[str, Any]:
-        cwd = self.config.resolve_project(project, fallback_to_cwd=True)
-        path = cwd / "CLAUDE.md"
+        path = self._path_for(project, fallback_to_cwd=True)
         return {
             "project": project,
             "path": str(path),
@@ -504,7 +537,6 @@ class ClaudeMdStore:
         }
 
     def save(self, project: str, content: str) -> dict[str, Any]:
-        cwd = self.config.resolve_project(project, fallback_to_cwd=False)
-        path = cwd / "CLAUDE.md"
+        path = self._path_for(project, fallback_to_cwd=False)
         atomic_write_text(path, content)
         return {"ok": True, "path": str(path)}

@@ -15,6 +15,7 @@ from typing import Any, Type
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .cli_adapter import ClaudeCliAdapter
+from .netchat import NetChatService
 from .scheduler import Scheduler
 from .stores import (
     CapabilityStore,
@@ -48,17 +49,20 @@ class AppContext:
         self.capability_store = CapabilityStore(self.data_dir)
         self.cli = cli or ClaudeCliAdapter()
         self.task_service = TaskService(self.task_store, self.event_store, self.capability_store, self.cli)
-        self.friends = FriendStore(self.data_dir, self.config.get("friends", []))
+        self.friends = FriendStore(self.data_dir, self.config.get("friends", []), self.avatars_dir)
         self.profile = ProfileStore(self.data_dir, self.config.get("user_name", "我"))
         self.moments = MomentStore(self.data_dir, self.friends, self.profile)
         self.skills = SkillStore(skills_dir)
         self.claude_md = ClaudeMdStore(self.config_store)
         self.scheduler = Scheduler(self.task_service, self.config_store, self.data_dir,
                                    autostart=scheduler_autostart)
+        # 网络好友（互联网真人聊天，GitHub 中转）——未配置则待命，对现有零影响
+        self.netchat = NetChatService(self.data_dir)
 
     def close(self) -> None:
         self.scheduler.stop()
         self.task_service.shutdown()
+        self.netchat.shutdown()
 
 
 class QuietHTTPServer(ThreadingHTTPServer):
@@ -158,6 +162,13 @@ def make_handler(context: AppContext) -> Type[BaseHTTPRequestHandler]:
                 if path == "/api/tasks": return self._json(self.app.task_service.list_tasks())
                 if path.startswith("/api/tasks/") and path.endswith("/events"):
                     return self._sse(path.split("/")[3], query)
+                # 网络好友（互联网真人聊天）
+                if path == "/api/net/state": return self._json(self.app.netchat.public_state())
+                if path == "/api/net/friends": return self._json(self.app.netchat.friends())
+                if path == "/api/net/history":
+                    return self._json(self.app.netchat.history((query.get("peer") or [""])[0]))
+                if path == "/api/net/events":
+                    return self._sse_net(query)
                 if path == "/api/avatars":
                     exts = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
                     files = sorted(p.name for p in self.app.avatars_dir.iterdir()
@@ -216,6 +227,40 @@ def make_handler(context: AppContext) -> Type[BaseHTTPRequestHandler]:
             finally:
                 self.app.task_service.unsubscribe(task_id, channel)
 
+        def _sse_net(self, query: dict[str, list[str]]) -> None:
+            # 网络好友的事件流（仿 _sse，但订阅 netchat 的轻量扇出）
+            last_id = self.headers.get("Last-Event-ID") or (query.get("lastEventId") or ["0"])[0]
+            try:
+                cursor = max(0, int(last_id or 0))
+            except ValueError:
+                cursor = 0
+            channel = self.app.netchat.subscribe()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+            try:
+                for event in self.app.netchat.replay_after(cursor):
+                    seq = int(event.get("_seq") or 0)
+                    if seq > cursor:
+                        self._write_sse(event); cursor = seq
+                self.wfile.write(b"event: ready\ndata: {}\n\n"); self.wfile.flush()
+                while True:
+                    try:
+                        event = channel.get(timeout=15)
+                        seq = int(event.get("_seq") or 0)
+                        if seq <= cursor: continue
+                        self._write_sse(event); cursor = seq
+                    except queue.Empty:
+                        self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            finally:
+                self.app.netchat.unsubscribe(channel)
+
         def _write_sse(self, event: dict[str, Any]) -> None:
             seq = int(event.get("_seq") or 0)
             payload = json.dumps(event, ensure_ascii=False)
@@ -225,6 +270,24 @@ def make_handler(context: AppContext) -> Type[BaseHTTPRequestHandler]:
             try:
                 self._validate_local_request()
                 path, body = urlparse(self.path).path, self._read_json()
+                # 网络好友（互联网真人聊天）
+                if path == "/api/net/setup":
+                    return self._json(self.app.netchat.setup(
+                        str(body.get("owner") or ""), str(body.get("repo") or ""),
+                        str(body.get("token") or ""), str(body.get("handle") or ""),
+                        str(body.get("avatar") or "🧑"), str(body.get("sign") or ""),
+                        str(body.get("nickname") or "")))
+                if path == "/api/net/addfriend":
+                    return self._json(self.app.netchat.add_friend(str(body.get("handle") or "")))
+                if path == "/api/net/delfriend":
+                    return self._json(self.app.netchat.del_friend(str(body.get("handle") or "")))
+                if path == "/api/net/clearhistory":
+                    return self._json(self.app.netchat.clear_history(str(body.get("peer") or "")))
+                if path == "/api/net/send":
+                    return self._json(self.app.netchat.send(
+                        str(body.get("to") or ""), str(body.get("text") or "")))
+                if path == "/api/net/ping":
+                    self.app.netchat.mark_active(); return self._json({"ok": True})
                 if path == "/api/tasks":
                     prompt = str(body.get("prompt") or "").strip()
                     if not prompt: raise ApiError("prompt 不能为空")
@@ -245,10 +308,15 @@ def make_handler(context: AppContext) -> Type[BaseHTTPRequestHandler]:
                         if not text: raise ApiError("text 不能为空")
                         return self._json(self.app.task_service.send_message(task_id, text))
                     if action == "interrupt": return self._json(self.app.task_service.interrupt(task_id))
+                    if action == "model": return self._json(self.app.task_service.set_model(task_id, str(body.get("model") or "")))
                     if action == "adddir": return self._json(self.app.task_service.add_dir(task_id, str(body.get("path") or "")))
                     if action == "rmdir": return self._json(self.app.task_service.remove_dir(task_id, str(body.get("path") or "")))
                     if action == "delete": self.app.task_service.delete_task(task_id); return self._json({"ok": True})
                     if action == "pin": return self._json(self.app.task_service.set_pinned(task_id, bool(body.get("pinned"))))
+                    if action == "permission": return self._json(self.app.task_service.set_permission_mode(task_id, str(body.get("permission_mode") or "")))
+                    if action == "perm-decide": return self._json(self.app.task_service.resolve_permission(
+                        task_id, str(body.get("request_id") or ""),
+                        str(body.get("behavior") or "deny"), str(body.get("scope") or "once")))
                     raise ApiError("not found", 404)
                 if path == "/api/skills":
                     name = str(body.get("name") or "").strip()

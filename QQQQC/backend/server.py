@@ -8,7 +8,8 @@ from pathlib import Path
 
 from backend.api import AppContext, QuietHTTPServer, make_handler, open_app_window, serve
 
-BASE = Path(__file__).resolve().parent
+# server.py 在 backend/ 下，工程根是 parents[1]（config.json / data / frontend 都在根）
+BASE = Path(__file__).resolve().parents[1]
 APP = AppContext(BASE)
 CONFIG = APP.config
 MANAGER = APP.task_service

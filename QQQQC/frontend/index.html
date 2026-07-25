@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QQQQC</title>
+<title>Q-CC</title>
 <link rel="stylesheet" href="/frontend/styles/main.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
   <div id="titlebar">
     <div class="tb-drag" id="tb-drag">
       <svg class="app-icon" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="#2b6cd0"/><rect x="3.5" y="4.5" width="13" height="11" rx="2" fill="#0d2b52"/><path d="M6 8l2.4 2L6 12" stroke="#7ef0ff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="9.6" y="11.2" width="4.4" height="1.5" rx=".7" fill="#7ef0ff"/></svg>
-      <span class="title" id="win-title">QQQQC</span>
+      <span class="title" id="win-title">Q-CC</span>
     </div>
     <div class="winbtn wb-min" id="win-min" title="最小化"></div>
     <div class="winbtn wb-max" id="win-max" title="最大化"></div>
@@ -25,29 +25,33 @@
     <div class="toolbtn" data-act="sched"><span class="ico">🗓️</span>我的安排</div>
     <div class="toolbar-sep"></div>
     <div class="toolbtn" data-act="skills"><span class="ico">🛠️</span>我的skill</div>
-    <div class="toolbtn" data-act="qzone"><span class="ico">🌟</span>QQ空间</div>
-    <div class="toolbtn" data-act="games"><span class="ico">🎮</span>QQ小游戏</div>
+    <div class="toolbtn" data-act="qzone"><span class="ico">🌟</span>My Zone</div>
+    <div class="toolbtn" data-act="games"><span class="ico">🎮</span>小游戏</div>
     <div class="toolbtn" data-act="chat"><span class="ico">💬</span>聊天</div>
+    <div class="toolbar-sep"></div>
+    <div class="toolbtn" data-act="font"><span class="ico">🅰</span>字体</div>
   </div>
 
   <!-- 主体三栏 -->
   <div id="main">
     <!-- 左栏 -->
     <div id="left" class="panel">
-      <div class="group-hd"><span>Claude Code</span><span class="arrow">▲</span></div>
+      <div class="group-hd" data-toggle="nav-list"><span>设定面板</span><span class="arrow">▲</span></div>
       <div id="left-scroll">
         <div class="group-bd" id="nav-list">
           <div class="nav-item" data-act="addfriend">➕ 添加好友</div>
           <div class="nav-item" data-act="sched">⏰ 已安排</div>
           <div class="nav-item" data-act="plugins">🧩 插件</div>
           <div class="nav-item" data-act="md">📄 CLAUDE.md</div>
-          <div class="nav-item" data-act="qzone">🌟 QQ空间</div>
+          <div class="nav-item" data-act="qzone">🌟 My Zone</div>
           <div class="nav-item" data-act="chat">💬 聊天</div>
         </div>
         <div class="group-hd" data-toggle="pinned-list"><span>置顶</span><span class="arrow">▲</span></div>
         <div class="group-bd" id="pinned-list"></div>
         <div class="group-hd" data-toggle="task-list"><span>聊天信息</span><span class="arrow">▲</span></div>
         <div class="group-bd" id="task-list"></div>
+        <div class="group-hd" data-toggle="net-chats"><span>真人聊天</span><span class="arrow">▲</span></div>
+        <div class="group-bd" id="net-chats"></div>
       </div>
       <div id="usercard" title="点击编辑我的资料">
         <div class="avatar" id="me-avatar">🧑‍💻</div>
@@ -64,6 +68,7 @@
       <div id="chat-hd">
         <span id="chat-avatar" class="doc-ico">📄</span>
         <span id="chat-title">欢迎使用</span>
+        <select id="chat-model" title="切换这个会话用的模型"></select>
         <span id="chat-meta"></span>
       </div>
       <div id="messages">
@@ -78,9 +83,10 @@
           <div class="in-btn" id="emoji-btn">😊 表情</div>
           <div class="in-btn" id="slash-btn">⚡ 命令</div>
           <div class="in-btn" id="attach-btn">📎 附加 ▾</div>
+          <div class="in-btn" id="perm-btn" title="权限模式（类似 Claude Code 的 plan / auto）">🛡 默认 ▾</div>
           <div class="in-btn" id="stop-btn">⏹ 停止</div>
         </div>
-        <textarea id="prompt" placeholder="要求后续变更…（Ctrl+Enter 发送）"></textarea>
+        <textarea id="prompt" placeholder="聊会…（Ctrl+Enter 发送）"></textarea>
         <div id="send-row">
           <span style="color:#93a5ba">连按两次 Ctrl+Enter 也不会重复发送，放心敲</span>
           <button id="send-btn" style="margin-left:auto">发送(S) ▾</button>
@@ -120,7 +126,7 @@
       <!-- QQ小游戏 视图 -->
       <div id="games-view" class="cview">
         <div class="cview-hd">
-          <span class="cv-title">🎮 QQ小游戏</span>
+          <span class="cv-title">🎮 小游戏</span>
           <span class="spacer"></span>
           <span id="game-score" style="font-size:14px;color:#5a7699"></span>
           <button class="mini-btn" id="game-back" style="display:none">↩ 游戏大厅</button>
@@ -138,7 +144,7 @@
       <!-- QQ空间 视图 -->
       <div id="qzone-view" class="cview">
         <div class="cview-hd">
-          <span class="cv-title">🌟 QQ空间</span>
+          <span class="cv-title">🌟 My Zone</span>
           <span class="spacer"></span>
           <span id="qz-me" style="display:flex;align-items:center;gap:6px;font-size:14px;color:#14467e"></span>
         </div>
@@ -169,8 +175,10 @@
 
     <!-- 右栏 -->
     <div id="right" class="panel">
-      <div class="group-hd"><span id="friends-hd">我的好友</span><span class="arrow">▲</span></div>
-      <div id="friends"></div>
+      <div class="group-hd" data-toggle="friends"><span id="friends-hd">我的好友</span><span class="arrow">▲</span></div>
+      <div id="friends" class="group-bd"></div>
+      <div class="group-hd" data-toggle="net-friends" style="margin-top:4px"><span>真人好友</span><span style="margin-left:auto;display:flex;gap:8px;align-items:center"><span id="net-gear" title="我的资料（ID/昵称/头像/个签）" style="cursor:pointer;font-size:14px">⚙</span><span class="arrow">▲</span></span></div>
+      <div id="net-friends" class="group-bd"></div>
     </div>
   </div>
 
@@ -186,6 +194,12 @@
 
 <!-- 表情面板 -->
 <div id="emoji-panel"></div>
+
+<!-- 字体切换面板 -->
+<div id="font-panel"></div>
+
+<!-- 权限模式切换面板 -->
+<div id="perm-panel"></div>
 
 <!-- 斜杠命令下拉 -->
 <div id="slash-pop"></div>
@@ -276,6 +290,36 @@
   </div>
 </div>
 
+<!-- 网络好友设置弹窗（GitHub 中转） -->
+<div id="net-mask" class="modal-mask">
+  <div class="modal">
+    <div class="m-title"><span>🌐 真人好友 · 我的资料</span><div class="winbtn close" id="net-close">✕</div></div>
+    <div class="m-body-form">
+      <label><span class="lab">仓库：</span><input type="text" id="net-repo" placeholder="owner/repo（你的GitHub用户名/qcc-chat）"></label>
+      <label><span class="lab">令牌：</span><input type="password" id="net-token" placeholder="GitHub PAT；已连接后只改资料可留空"></label>
+      <label><span class="lab">Q-CC ID：</span><input type="text" id="net-handle" placeholder="唯一身份ID（英数/_/-），别人靠它加你"></label>
+      <label><span class="lab">昵称：</span><input type="text" id="net-nickname" placeholder="显示名，可随时改，对方能看到"></label>
+      <label style="align-items:flex-start"><span class="lab" style="margin-top:4px">头像：</span>
+        <div style="flex:1">
+          <div id="net-avatar-grid" class="avatar-grid"></div>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
+            <span style="color:#789;font-size:13px">或用 emoji</span>
+            <input type="text" id="net-avatar" class="av-emoji" maxlength="4" style="max-width:70px" placeholder="🙂">
+          </div>
+        </div>
+      </label>
+      <label><span class="lab">个签：</span><input type="text" id="net-sign" placeholder="个性签名，对方能看到"></label>
+      <div id="net-hint" style="color:#8398b0;font-size:12px;padding:2px 4px 0">
+        我的号会显示在这里。仅个人娱乐、勿传敏感内容；令牌只存本机 data/，不外传、不进分享包。
+      </div>
+    </div>
+    <div class="m-foot">
+      <button class="xp-btn" id="net-save">保存并连接</button>
+      <button class="xp-btn" id="net-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
 <!-- 新建/编辑 skill 弹窗 -->
 <div id="skill-mask" class="modal-mask">
   <div class="modal" style="width:560px">
@@ -315,6 +359,16 @@
   </div>
 </div>
 
-<script src="/frontend/app.js"></script>
+<!-- 前端逻辑按功能拆分，务必保持此加载顺序(靠顺序共享全局作用域、避免前向引用) -->
+<script src="/frontend/js/core.js"></script>
+<script src="/frontend/js/chat.js"></script>
+<script src="/frontend/js/friends.js"></script>
+<script src="/frontend/js/tasks.js"></script>
+<script src="/frontend/js/panels.js"></script>
+<script src="/frontend/js/views.js"></script>
+<script src="/frontend/js/shell.js"></script>
+<script src="/frontend/js/prefs.js"></script>
+<script src="/frontend/js/netchat.js"></script>
+<script src="/frontend/js/main.js"></script>
 </body>
 </html>

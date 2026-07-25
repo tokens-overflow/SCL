@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import threading
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from typing import Any, Callable
 EventCallback = Callable[[dict[str, Any]], None]
 ErrorCallback = Callable[[str], None]
 ExitCallback = Callable[[int], None]
+ControlCallback = Callable[[dict[str, Any]], None]
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,20 @@ class SessionHandle:
             self._process.stdin.write(encoded)
             self._process.stdin.flush()
 
+    def send_control_response(self, request_id: str, response: dict[str, Any]) -> None:
+        # 权限 control protocol の応答。claude が stdout に投げた can_use_tool の
+        # request_id に対して stdin で {behavior: allow|deny, ...} を返す。
+        payload = {
+            "type": "control_response",
+            "response": {"subtype": "success", "request_id": request_id, "response": response},
+        }
+        encoded = json.dumps(payload, ensure_ascii=False) + "\n"
+        with self._write_lock:
+            if self._process.stdin is None:
+                raise BrokenPipeError("Claude CLI stdin 不可用")
+            self._process.stdin.write(encoded)
+            self._process.stdin.flush()
+
     def terminate(self) -> None:
         if self.is_alive():
             self._process.terminate()
@@ -71,6 +87,12 @@ class ClaudeCliAdapter:
         self._base_command = shlex.split(configured)
         if not self._base_command:
             raise ValueError("CLAUDE2007_CLAUDE_BIN 不能为空")
+        # Windows では `claude` は npm 製の claude.cmd シムで、CreateProcess は
+        # PATHEXT を補完しないため ['claude', ...] だと [WinError 2] になる。
+        # shutil.which で実体パス（claude.CMD 等）へ正規化する。mac/Linux でも無害。
+        resolved = shutil.which(self._base_command[0])
+        if resolved:
+            self._base_command[0] = resolved
 
     @property
     def executable_name(self) -> str:
@@ -89,8 +111,20 @@ class ClaudeCliAdapter:
         ]
         if spec.model:
             command += ["--model", spec.model]
-        if spec.permission_mode and spec.permission_mode != "default":
-            command += ["--permission-mode", spec.permission_mode]
+        # 权限は stdio control protocol で QQQQC 自身が裁く。--permission-prompt-tool stdio を付けると
+        # claude はツール実行可否を stdout の control_request(can_use_tool) で問い合わせ、こちらは stdin の
+        # control_response で allow/deny を返せる。外部 MCP も folder trust も不要なので、企業ポリシーの
+        # bypass 封じ / MCP ホワイトリストを完全に回避できる（--dangerously-skip-permissions は本機で
+        # default に格下げされ効かなかったため廃止）。
+        command += ["--permission-prompt-tool", "stdio"]
+        # 全自动(bypassPermissions) は QQQQC 側で即 allow するので claude には default を渡す。
+        # acceptEdits は編集を claude 側で自動許可（control_request が来ない）、plan は計画のみ。
+        mode = spec.permission_mode
+        if mode == "acceptEdits":
+            command += ["--permission-mode", "acceptEdits"]
+        elif mode == "plan":
+            command += ["--permission-mode", "plan"]
+        # default / bypassPermissions はフラグ省略（既定 default）。可否は control protocol で決める。
         for directory in spec.add_dirs:
             command += ["--add-dir", directory]
         if spec.resume and spec.session_id:
@@ -104,6 +138,7 @@ class ClaudeCliAdapter:
         on_event: EventCallback,
         on_error: ErrorCallback,
         on_exit: ExitCallback,
+        on_control: ControlCallback | None = None,
     ) -> SessionHandle:
         process = subprocess.Popen(
             self.build_command(spec),
@@ -112,13 +147,18 @@ class ClaudeCliAdapter:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            # 明示 UTF-8。指定しないと日本語 Windows のロケール既定(cp932)で
+            # stdin/stdout をエンコードし、中文(你 等)で
+            # 'cp932' codec can't encode character になる。stream-json は UTF-8。
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
         )
         handle = SessionHandle(process)
 
         threading.Thread(
             target=self._pump_stdout,
-            args=(process, on_event, on_exit),
+            args=(process, on_event, on_exit, on_control),
             daemon=True,
             name=f"claude-stdout-{spec.task_id}",
         ).start()
@@ -135,6 +175,7 @@ class ClaudeCliAdapter:
         process: subprocess.Popen[str],
         on_event: EventCallback,
         on_exit: ExitCallback,
+        on_control: ControlCallback | None = None,
     ) -> None:
         try:
             if process.stdout is not None:
@@ -146,6 +187,11 @@ class ClaudeCliAdapter:
                         event = json.loads(line)
                     except json.JSONDecodeError:
                         event = {"type": "x-raw", "text": line}
+                    # 权限 control protocol は通常イベントではないので分岐（UI には流さない）。
+                    if isinstance(event, dict) and event.get("type") == "control_request":
+                        if on_control is not None:
+                            on_control(event)
+                        continue
                     on_event(event)
         finally:
             code = process.wait()
