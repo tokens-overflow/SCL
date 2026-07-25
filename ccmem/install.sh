@@ -57,6 +57,10 @@ if os.path.exists(settings_path):
     if not isinstance(settings, dict):
         sys.exit("错误:%s 顶层不是 JSON 对象,安装中止。" % settings_path)
     bak = "%s.bak.%s" % (settings_path, time.strftime("%Y%m%d%H%M%S"))
+    n = 1
+    while os.path.exists(bak):   # 同一秒内重复运行不要覆盖上一份备份
+        bak = "%s.bak.%s-%d" % (settings_path, time.strftime("%Y%m%d%H%M%S"), n)
+        n += 1
     with open(bak, "w", encoding="utf-8") as f:
         f.write(raw)
     print("已备份原配置到 %s" % bak)
