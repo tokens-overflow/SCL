@@ -45,14 +45,25 @@ class SessionHandle:
     def is_alive(self) -> bool:
         return self._process.poll() is None
 
-    def send_user_message(self, text: str) -> None:
-        payload = {
-            "type": "user",
-            "message": {
-                "role": "user",
-                "content": [{"type": "text", "text": text}],
-            },
-        }
+    def send_user_message(self, text: str, images: list[dict] | None = None) -> None:
+        """把一条用户消息写进 claude 的 stdin。images 是粘贴进来的图片
+        （{media_type, data(base64)}），转成 Anthropic 的 image content block。"""
+        content: list[dict] = []
+        if text:
+            content.append({"type": "text", "text": text})
+        for img in images or []:
+            data = img.get("data")
+            if not data:
+                continue
+            content.append({
+                "type": "image",
+                "source": {"type": "base64",
+                           "media_type": img.get("media_type") or "image/png",
+                           "data": data},
+            })
+        if not content:
+            content.append({"type": "text", "text": ""})
+        payload = {"type": "user", "message": {"role": "user", "content": content}}
         encoded = json.dumps(payload, ensure_ascii=False) + "\n"
         with self._write_lock:
             if self._process.stdin is None:

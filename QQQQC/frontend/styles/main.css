@@ -546,3 +546,19 @@ body.netchat-mode #stop-btn { display: none !important; }
 .qz-foot .qz-act { cursor: pointer; }
 .qz-foot .qz-act:hover { color: #1b5cc8; }
 .qz-foot .qz-del:hover { color: #c0392b; }
+
+/* 粘贴的图片：消息气泡里的缩略 + 输入区待发送缩略条 */
+.m-body .msg-img, .paste-thumb img {
+  max-width: 260px; max-height: 260px; border-radius: 6px;
+  border: 1px solid #c4d8ee; display: block; margin: 4px 0;
+}
+#paste-strip { display: none; gap: 6px; flex-wrap: wrap; padding: 6px 8px 0; }
+#paste-strip.show { display: flex; }
+.paste-thumb { position: relative; }
+.paste-thumb img { max-width: 84px; max-height: 84px; margin: 0; }
+.paste-thumb .pt-del {
+  position: absolute; top: -6px; right: -6px; width: 17px; height: 17px;
+  display: flex; align-items: center; justify-content: center;
+  background: #d8452a; color: #fff; border-radius: 50%; font-size: 11px;
+  cursor: pointer; border: 1px solid #fff;
+}

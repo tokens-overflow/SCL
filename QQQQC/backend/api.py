@@ -87,7 +87,7 @@ def make_handler(context: AppContext) -> Type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
         app = context
-        max_body_bytes = 2 * 1024 * 1024
+        max_body_bytes = 24 * 1024 * 1024   # 允许粘贴图片(base64 较大)
 
         def log_message(self, fmt: str, *args: Any) -> None:
             pass
@@ -292,9 +292,18 @@ def make_handler(context: AppContext) -> Type[BaseHTTPRequestHandler]:
                     prompt = str(body.get("prompt") or "").strip()
                     if not prompt: raise ApiError("prompt 不能为空")
                     project = str(body.get("project") or "")
+                    # cwd_path：界面「📁 浏览…」选中的目录，优先于项目下拉；
+                    # 不存在则直接报错，别悄悄退回别的目录让人以为选中了。
+                    cwd_path = str(body.get("cwd_path") or "").strip()
+                    if cwd_path:
+                        chosen = Path(os.path.expanduser(cwd_path)).resolve()
+                        if not chosen.is_dir(): raise ApiError(f"目录不存在: {chosen}")
+                        cwd, project = chosen, chosen.name
+                    else:
+                        cwd = self.app.config_store.resolve_project(project, fallback_to_cwd=True)
                     task = self.app.task_service.create_task(
                         title=str(body.get("title") or "").strip(), project=project or "(默认)",
-                        cwd=self.app.config_store.resolve_project(project, fallback_to_cwd=True),
+                        cwd=cwd,
                         model=str(body.get("model") or self.app.config["default_model"]),
                         permission_mode=str(body.get("permission_mode") or self.app.config["default_permission_mode"]),
                         prompt=prompt, add_dirs=list(body.get("add_dirs") or []),
@@ -305,8 +314,10 @@ def make_handler(context: AppContext) -> Type[BaseHTTPRequestHandler]:
                     parts = path.split("/"); task_id = parts[3]; action = parts[4] if len(parts) > 4 else ""
                     if action == "message":
                         text = str(body.get("text") or "").strip()
-                        if not text: raise ApiError("text 不能为空")
-                        return self._json(self.app.task_service.send_message(task_id, text))
+                        raw = body.get("images")
+                        images = [i for i in raw if isinstance(i, dict) and i.get("data")] if isinstance(raw, list) else []
+                        if not text and not images: raise ApiError("内容不能为空")
+                        return self._json(self.app.task_service.send_message(task_id, text, images))
                     if action == "interrupt": return self._json(self.app.task_service.interrupt(task_id))
                     if action == "model": return self._json(self.app.task_service.set_model(task_id, str(body.get("model") or "")))
                     if action == "adddir": return self._json(self.app.task_service.add_dir(task_id, str(body.get("path") or "")))

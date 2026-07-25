@@ -78,6 +78,24 @@ function openTask(id) {
 }
 
 /* ================= 交互 ================= */
+let PICKED_CWD = '';   // 「📁 浏览…」选中的自定义工作目录（留空=用项目下拉）
+function renderPickedCwd() {
+  $('#f-cwd-row').style.display = PICKED_CWD ? '' : 'none';
+  $('#f-cwd').textContent = PICKED_CWD;
+  $('#f-project').disabled = !!PICKED_CWD;
+}
+/* 鼠标选目录：原生窗口用系统对话框，浏览器兜底手输 */
+async function pickFolder() {
+  const a = (window.pywebview && window.pywebview.api) || null;
+  if (a && a.pick_folder) return (await Promise.resolve(a.pick_folder())) || '';
+  return (prompt('浏览器模式下没有系统对话框，请粘贴目录绝对路径（支持 ~）：') || '').trim();
+}
+$('#f-browse').addEventListener('click', async () => {
+  const dir = await pickFolder();
+  if (dir) { PICKED_CWD = dir; renderPickedCwd(); }
+});
+$('#f-cwd-clear').addEventListener('click', () => { PICKED_CWD = ''; renderPickedCwd(); });
+
 function openNewTaskModal(projectName, prefillPrompt) {
   $('#modal-mask').classList.add('show');
   if (projectName) $('#f-project').value = projectName;
@@ -93,6 +111,7 @@ async function createTask() {
   const body = {
     title: $('#f-title').value.trim(),
     project: $('#f-project').value,
+    cwd_path: PICKED_CWD,          // 有值则以它为本次会话的工作目录
     model: $('#f-model').value,
     permission_mode: $('#f-perm').value,
     prompt,
@@ -102,17 +121,49 @@ async function createTask() {
   if (task.error) { alert(task.error); return; }
   closeModal();
   $('#f-title').value = ''; $('#f-prompt').value = '';
+  PICKED_CWD = ''; renderPickedCwd();
   TASKS.unshift(task);
   openTask(task.id);
 }
 
 let sending = false;
+let PENDING_IMAGES = [];   // 待发送的粘贴图片 {media_type, data(base64), url}
+function renderPasteStrip() {
+  const strip = $('#paste-strip');
+  strip.classList.toggle('show', PENDING_IMAGES.length > 0);
+  strip.innerHTML = PENDING_IMAGES.map((im, i) =>
+    `<div class="paste-thumb"><img src="${im.url}" alt=""><span class="pt-del" data-delimg="${i}">✕</span></div>`).join('');
+}
+/* 直接把复制的图片粘贴到输入框 */
+$('#prompt').addEventListener('paste', (e) => {
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  let added = false;
+  for (const it of items) {
+    if (it.kind === 'file' && it.type.startsWith('image/')) {
+      const file = it.getAsFile(); if (!file) continue;
+      added = true;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const url = String(reader.result);
+        PENDING_IMAGES.push({ media_type: file.type || 'image/png', data: url.slice(url.indexOf(',') + 1), url });
+        renderPasteStrip();
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+  if (added) e.preventDefault();   // 别把图片当二进制塞进文本框
+});
+$('#paste-strip').addEventListener('click', (e) => {
+  const del = e.target.closest('[data-delimg]');
+  if (del) { PENDING_IMAGES.splice(+del.dataset.delimg, 1); renderPasteStrip(); }
+});
 async function sendMessage() {
   if (sending) return;
   const text = $('#prompt').value.trim();
-  if (!text) return;
+  const images = PENDING_IMAGES.map(im => ({ media_type: im.media_type, data: im.data }));
+  if (!text && !images.length) return;
   if (!currentTaskId) {
-    // 还没有打开任务：把这句话带进「新建任务」，避免点了发送却毫无反应
+    // 还没有打开任务：把这句话带进「新建任务」（图片会被清掉，先开一段对话再贴）
     openNewTaskModal(null, text);
     $('#prompt').value = '';
     return;
@@ -120,11 +171,12 @@ async function sendMessage() {
   sending = true; $('#send-btn').disabled = true;
   try {
     const res = await fetch(`/api/tasks/${currentTaskId}/message`, {
-      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text })
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text, images })
     });
     const t = await res.json();
     if (t.error) { alert(t.error); return; }
     $('#prompt').value = '';
+    PENDING_IMAGES = []; renderPasteStrip();
     setTaskStatus(currentTaskId, 'running');
   } finally { sending = false; $('#send-btn').disabled = false; }
 }

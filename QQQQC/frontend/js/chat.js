@@ -12,11 +12,13 @@ function newView() {
 function msgContainer() { return $('#messages'); }
 function scrollBottom() { const m = msgContainer(); m.scrollTop = m.scrollHeight; }
 
-function addUserMsg(text, ts) {
+function imgSrc(im) { return typeof im === 'string' ? im : `data:${im.media_type || 'image/png'};base64,${im.data}`; }
+function addUserMsg(text, ts, images) {
+  const imgs = (images || []).map(im => `<img class="msg-img" src="${imgSrc(im)}" alt="">`).join('');
   const div = document.createElement('div');
   div.className = 'msg user';
   div.innerHTML = `<div class="m-head"><span class="mh-ava">${avatarHtml(ME.avatar)}</span>${esc(ME.name)} ${ts ? fmtTime(ts) : ''}</div>` +
-    `<div class="m-body">${mdInline(text)}</div>`;
+    `<div class="m-body">${imgs}${text ? mdInline(text) : ''}</div>`;
   msgContainer().appendChild(div); scrollBottom();
 }
 /* 同一条 assistant 消息(相同 message.id)的多个内容块会分多个事件到达,
@@ -108,7 +110,7 @@ function handleEvent(ev) {
   switch (ev.type) {
     case 'x-user':
       closeBubble(v);
-      addUserMsg(ev.text, ev.ts); break;
+      addUserMsg(ev.text, ev.ts, ev.images); break;
     case 'system':
       if (ev.subtype === 'init') {
         syncChatModel(ev.model);

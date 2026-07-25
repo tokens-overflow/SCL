@@ -86,7 +86,8 @@
           <div class="in-btn" id="perm-btn" title="权限模式（类似 Claude Code 的 plan / auto）">🛡 默认 ▾</div>
           <div class="in-btn" id="stop-btn">⏹ 停止</div>
         </div>
-        <textarea id="prompt" placeholder="聊会…（Ctrl+Enter 发送）"></textarea>
+        <div id="paste-strip"></div>
+        <textarea id="prompt" placeholder="聊会…（可直接粘贴图片，Ctrl+Enter 发送）"></textarea>
         <div id="send-row">
           <span style="color:#93a5ba">连按两次 Ctrl+Enter 也不会重复发送，放心敲</span>
           <button id="send-btn" style="margin-left:auto">发送(S) ▾</button>
@@ -213,7 +214,16 @@
     <div class="m-title">📋 新建任务<div class="winbtn close" id="modal-close">✕</div></div>
     <div class="m-body-form">
       <label><span class="lab">标题：</span><input type="text" id="f-title" placeholder="留空自动取指令前几个字"></label>
-      <label><span class="lab">项目：</span><select id="f-project"></select></label>
+      <label><span class="lab">项目：</span>
+        <span style="display:flex;gap:6px;flex:1;min-width:0;align-items:center">
+          <select id="f-project" style="flex:1;min-width:0"></select>
+          <button type="button" class="mini-btn" id="f-browse" title="用系统对话框选一个文件夹作为本次会话的工作目录">📁 浏览…</button>
+        </span></label>
+      <label id="f-cwd-row" style="display:none"><span class="lab">目录：</span>
+        <span style="display:flex;gap:6px;flex:1;min-width:0;align-items:center">
+          <code id="f-cwd" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#14467e"></code>
+          <span id="f-cwd-clear" title="改回用上面的项目" style="cursor:pointer;color:#c0392b;font-weight:700">✕</span>
+        </span></label>
       <label><span class="lab">模型：</span><select id="f-model"></select></label>
       <label><span class="lab">权限：</span><select id="f-perm">
         <option value="acceptEdits">acceptEdits（自动接受编辑）</option>

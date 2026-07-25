@@ -224,7 +224,9 @@ class TaskService:
             raise
         return self.get_task(task["id"])
 
-    def send_message(self, task_id: str, text: str) -> dict[str, Any]:
+    def send_message(self, task_id: str, text: str,
+                     images: list[dict] | None = None) -> dict[str, Any]:
+        images = images or []
         with self.lock:
             task = self.get_task(task_id)
             handle = self._handles.get(task_id)
@@ -235,9 +237,9 @@ class TaskService:
             task_id,
             lambda item: item.update(status="running", updated_at=time.time()),
         )
-        self.emit(task_id, {"type": "x-user", "text": text, "ts": time.time()})
+        self.emit(task_id, {"type": "x-user", "text": text, "ts": time.time(), "images": images})
         try:
-            handle.send_user_message(text)
+            handle.send_user_message(text, images)
         except (BrokenPipeError, OSError) as exc:
             self.emit(task_id, {"type": "x-stderr", "text": f"写入失败: {exc}"})
             self.tasks.mutate(task_id, lambda item: item.update(status="error", updated_at=time.time()))
