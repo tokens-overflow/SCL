@@ -1,0 +1,85 @@
+[project]
+name = "enterprise-agent"
+version = "1.0.0"
+description = "企业级 AI Agent 骨架：六层架构、状态机、断点续跑、幂等与补偿"
+readme = "README.md"
+# 说明：代码本身兼容 3.11+（未使用 3.12 独有语法），
+# 但推荐使用 3.12+ 以获得更好的 asyncio 性能与类型推导。
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "sqlalchemy[asyncio]>=2.0.25",
+    "aiosqlite>=0.20",
+    "httpx>=0.27",
+    "alembic>=1.13",
+    "structlog>=24.1",
+    "tenacity>=8.2",
+]
+
+[project.optional-dependencies]
+# PostgreSQL 生产部署
+postgres = ["asyncpg>=0.29"]
+# OpenTelemetry（默认不开启，接口已预留）
+otel = [
+    "opentelemetry-api>=1.24",
+    "opentelemetry-sdk>=1.24",
+    "opentelemetry-exporter-otlp>=1.24",
+    "opentelemetry-instrumentation-fastapi>=0.45b0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+    "mypy>=1.9",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q --strict-markers"
+markers = [
+    "unit: 单元测试",
+    "integration: 集成测试",
+    "e2e: 端到端测试",
+]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "ANN"]
+ignore = [
+    "ANN101",  # self 不需要标注
+    "ANN102",  # cls 不需要标注
+    "ANN401",  # 允许 Any（会话对象等确实是 Any）
+    "B008",    # FastAPI 的 Depends() 就是默认参数调用
+    "E501",    # 中文注释较长，行宽由 formatter 保证
+    "N818",    # 异常名不强制以 Error 结尾
+    "SIM108",  # 三元表达式不强制
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN", "N802"]
+"alembic/*" = ["ANN", "N"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]

@@ -1,0 +1,65 @@
+# ==========================================================================
+# 本地开发 / 演示编排。
+#
+# 默认 profile 只起应用（SQLite，零依赖）：
+#     docker compose up
+#
+# 需要演示「切换到 PostgreSQL」时：
+#     docker compose --profile postgres up
+#
+# 注意这里的密码全是本地演示值。**生产环境的密钥必须来自密钥管理服务，
+# 绝不写进 compose 文件，更不能提交到仓库。**
+# ==========================================================================
+services:
+  agent:
+    build: .
+    image: enterprise-agent:latest
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: dev
+      DEBUG: "true"
+      # 默认 SQLite：不依赖任何外部服务就能起来。
+      DATABASE_URL: sqlite+aiosqlite:///./data/enterprise_agent.db
+      # 默认 mock：**不需要任何 API Key**。
+      LLM_PROVIDER: mock
+      SEED_DEMO_DATA: "true"
+      LOG_LEVEL: INFO
+      LOG_JSON: "false"
+      # 真实密钥从宿主机环境注入，不写死在这里。
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - agent-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ---- 可选：PostgreSQL 演示 ----
+  # 启用方式：docker compose --profile postgres up
+  # 然后把 agent 服务的 DATABASE_URL 改成下面注释里的值。
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent_local_dev_only
+      POSTGRES_DB: enterprise_agent
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d enterprise_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # 切换到 PG 时，把 agent 服务的环境变量改成：
+    #   DATABASE_URL: postgresql+asyncpg://agent:agent_local_dev_only@postgres:5432/enterprise_agent
+    # 并加上 depends_on: postgres
+
+volumes:
+  agent-data:
+  pg-data:
